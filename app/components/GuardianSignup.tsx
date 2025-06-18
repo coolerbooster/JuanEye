@@ -1,44 +1,36 @@
 import React, { useState } from 'react';
 import {
-    View,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    StyleSheet,
+    View, Text, TextInput, TouchableOpacity, StyleSheet,
 } from 'react-native';
+import CheckBox from '@react-native-community/checkbox';
 
 type Props = {
-    onLogin: () => void;
-    onSignup: () => void;
-    onBack: () => void;
-    role: 'user' | 'guardian';
+    onBackToLogin: () => void;
 };
 
-const LoginScreen: React.FC<Props> = ({ onLogin, onSignup, onBack, role }) => {
+const GuardianSignup: React.FC<Props> = ({ onBackToLogin }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [confirm, setConfirm] = useState('');
+    const [agreed, setAgreed] = useState(false);
 
-    const handleLogin = () => {
-        // Mock login logic
-        if (email === 'admin' && password === 'admin') {
-            onLogin();
-        } else {
-            alert('Invalid credentials');
-        }
+    const handleSignup = () => {
+        if (!agreed) return alert('Please agree to the Data Privacy Notice');
+        if (password !== confirm) return alert('Passwords do not match');
+        alert('Guardian signed up successfully');
+        onBackToLogin();
     };
 
     return (
         <View style={styles.container}>
             <View style={styles.headerRow}>
                 <Text style={styles.logoText}>JuanEye 👁️</Text>
-                <TouchableOpacity onPress={onSignup}>
-                    <Text style={styles.link}>Sign Up</Text>
+                <TouchableOpacity onPress={onBackToLogin}>
+                    <Text style={styles.link}>Login</Text>
                 </TouchableOpacity>
             </View>
 
-            <Text style={styles.header}>
-                {role === 'guardian' ? 'GUARDIAN LOGIN' : 'LOGIN'}
-            </Text>
+            <Text style={styles.header}>GUARDIAN SIGN UP</Text>
 
             <Text style={styles.label}>Email</Text>
             <TextInput
@@ -47,6 +39,7 @@ const LoginScreen: React.FC<Props> = ({ onLogin, onSignup, onBack, role }) => {
                 onChangeText={setEmail}
                 placeholder="Email"
                 placeholderTextColor="#4d4d4d"
+                keyboardType="email-address"
             />
 
             <Text style={styles.label}>Password</Text>
@@ -59,20 +52,35 @@ const LoginScreen: React.FC<Props> = ({ onLogin, onSignup, onBack, role }) => {
                 secureTextEntry
             />
 
-            <Text style={styles.recover}>Recover Password</Text>
+            <Text style={styles.label}>Confirm Password</Text>
+            <TextInput
+                style={styles.input}
+                value={confirm}
+                onChangeText={setConfirm}
+                placeholder="Confirm Password"
+                placeholderTextColor="#4d4d4d"
+                secureTextEntry
+            />
 
-            <TouchableOpacity style={styles.loginBtn} onPress={handleLogin}>
-                <Text style={styles.loginText}>Login</Text>
+            <View style={styles.checkboxRow}>
+                <CheckBox value={agreed} onValueChange={setAgreed} />
+                <Text style={styles.privacyText}>
+                    Read <Text style={styles.privacyLink}>Data Privacy Notice</Text>
+                </Text>
+            </View>
+
+            <TouchableOpacity onPress={handleSignup} style={styles.signupBtn}>
+                <Text style={styles.signupText}>Sign Up</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={onBack} style={styles.backIcon}>
-                <Text style={{ fontSize: 24, color: 'white' }}>❮</Text>
+            <TouchableOpacity onPress={onBackToLogin} style={styles.backIcon}>
+                <Text style={{ fontSize: 32, color: 'white' }}>❮</Text>
             </TouchableOpacity>
         </View>
     );
 };
 
-export default LoginScreen;
+export default GuardianSignup;
 
 const styles = StyleSheet.create({
     container: {
@@ -116,26 +124,34 @@ const styles = StyleSheet.create({
         marginBottom: 16,
         color: '#000',
     },
-    recover: {
-        color: 'white',
-        textDecorationLine: 'underline',
-        fontSize: 13,
-        marginBottom: 40,
+    checkboxRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 30,
     },
-    loginBtn: {
+    privacyText: {
+        color: 'white',
+        marginLeft: 8,
+        fontSize: 13,
+    },
+    privacyLink: {
+        textDecorationLine: 'underline',
+    },
+    signupBtn: {
         backgroundColor: 'white',
         paddingVertical: 14,
         borderRadius: 8,
         alignItems: 'center',
+        marginBottom: 40,
     },
-    loginText: {
+    signupText: {
         color: '#1786d9',
         fontSize: 18,
         fontWeight: 'bold',
     },
     backIcon: {
         position: 'absolute',
-        bottom: 30,
+        bottom: 60,
         left: 20,
     },
 });

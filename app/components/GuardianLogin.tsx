@@ -1,26 +1,21 @@
 import React, { useState } from 'react';
 import {
-    View,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    StyleSheet,
+    View, Text, TextInput, TouchableOpacity, StyleSheet,
 } from 'react-native';
 
 type Props = {
     onLogin: () => void;
-    onSignup: () => void;
     onBack: () => void;
-    role: 'user' | 'guardian';
+    onSignUp: () => void;
 };
 
-const LoginScreen: React.FC<Props> = ({ onLogin, onSignup, onBack, role }) => {
+const GuardianLogin: React.FC<Props> = ({ onLogin, onBack, onSignUp }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
 
     const handleLogin = () => {
-        // Mock login logic
         if (email === 'admin' && password === 'admin') {
+            alert('Guardian login successful');
             onLogin();
         } else {
             alert('Invalid credentials');
@@ -31,14 +26,12 @@ const LoginScreen: React.FC<Props> = ({ onLogin, onSignup, onBack, role }) => {
         <View style={styles.container}>
             <View style={styles.headerRow}>
                 <Text style={styles.logoText}>JuanEye 👁️</Text>
-                <TouchableOpacity onPress={onSignup}>
+                <TouchableOpacity onPress={onSignUp}>
                     <Text style={styles.link}>Sign Up</Text>
                 </TouchableOpacity>
             </View>
 
-            <Text style={styles.header}>
-                {role === 'guardian' ? 'GUARDIAN LOGIN' : 'LOGIN'}
-            </Text>
+            <Text style={styles.header}>GUARDIAN LOGIN</Text>
 
             <Text style={styles.label}>Email</Text>
             <TextInput
@@ -47,6 +40,7 @@ const LoginScreen: React.FC<Props> = ({ onLogin, onSignup, onBack, role }) => {
                 onChangeText={setEmail}
                 placeholder="Email"
                 placeholderTextColor="#4d4d4d"
+                keyboardType="email-address"
             />
 
             <Text style={styles.label}>Password</Text>
@@ -59,20 +53,22 @@ const LoginScreen: React.FC<Props> = ({ onLogin, onSignup, onBack, role }) => {
                 secureTextEntry
             />
 
-            <Text style={styles.recover}>Recover Password</Text>
+            <TouchableOpacity>
+                <Text style={styles.recover}>Recover Password</Text>
+            </TouchableOpacity>
 
-            <TouchableOpacity style={styles.loginBtn} onPress={handleLogin}>
+            <TouchableOpacity onPress={handleLogin} style={styles.loginBtn}>
                 <Text style={styles.loginText}>Login</Text>
             </TouchableOpacity>
 
             <TouchableOpacity onPress={onBack} style={styles.backIcon}>
-                <Text style={{ fontSize: 24, color: 'white' }}>❮</Text>
+                <Text style={{ fontSize: 32, color: 'white' }}>❮</Text>
             </TouchableOpacity>
         </View>
     );
 };
 
-export default LoginScreen;
+export default GuardianLogin;
 
 const styles = StyleSheet.create({
     container: {
@@ -120,13 +116,14 @@ const styles = StyleSheet.create({
         color: 'white',
         textDecorationLine: 'underline',
         fontSize: 13,
-        marginBottom: 40,
+        marginBottom: 30,
     },
     loginBtn: {
         backgroundColor: 'white',
         paddingVertical: 14,
         borderRadius: 8,
         alignItems: 'center',
+        marginBottom: 40,
     },
     loginText: {
         color: '#1786d9',
@@ -135,7 +132,7 @@ const styles = StyleSheet.create({
     },
     backIcon: {
         position: 'absolute',
-        bottom: 30,
+        bottom: 60,
         left: 20,
     },
 });

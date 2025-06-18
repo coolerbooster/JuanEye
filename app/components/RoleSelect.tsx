@@ -1,24 +1,24 @@
+
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 
 type Props = {
-    onSelect: (role: 'user' | 'guardian') => void;
+    onSelectRole: (role: 'user' | 'guardian') => void;
 };
 
-const RoleSelect: React.FC<Props> = ({ onSelect }) => {
+const RoleSelect: React.FC<Props> = ({ onSelectRole }) => {
     return (
         <View style={styles.container}>
             <Text style={styles.logo}>JuanEye 👁️</Text>
-            <Text style={styles.question}>Which are you?</Text>
+            <Text style={styles.title}>Which are you?</Text>
 
-            <TouchableOpacity style={styles.option} onPress={() => onSelect('user')}>
-                <Ionicons name="person-outline" size={100} color="white" />
+            <TouchableOpacity style={styles.roleButton} onPress={() => onSelectRole('user')}>
+                <Text style={styles.icon}>👤</Text>
                 <Text style={styles.label}>User</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.option} onPress={() => onSelect('guardian')}>
-                <MaterialCommunityIcons name="shield-outline" size={100} color="white" />
+            <TouchableOpacity style={styles.roleButton} onPress={() => onSelectRole('guardian')}>
+                <Text style={styles.icon}>🛡️</Text>
                 <Text style={styles.label}>Guardian</Text>
             </TouchableOpacity>
         </View>
@@ -31,31 +31,34 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#1786d9',
-        alignItems: 'center',
-        justifyContent: 'center',
         paddingTop: 60,
+        alignItems: 'center',
     },
     logo: {
         color: 'white',
         fontWeight: 'bold',
         fontSize: 16,
         position: 'absolute',
-        top: 40,
-        left: 30,
+        top: 20,
+        left: 20,
     },
-    question: {
-        fontSize: 22,
+    title: {
+        fontSize: 20,
         color: 'white',
         marginBottom: 40,
         fontWeight: 'bold',
     },
-    option: {
+    roleButton: {
         alignItems: 'center',
-        marginBottom: 40,
+        marginVertical: 20,
+    },
+    icon: {
+        fontSize: 64,
+        color: 'white',
     },
     label: {
         color: 'white',
-        fontSize: 16,
+        fontWeight: 'bold',
         marginTop: 8,
     },
 });
