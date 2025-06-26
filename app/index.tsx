@@ -1,13 +1,14 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import LoginScreen from './components/LoginScreen';
+// import Signup from './components/Signup';
+// import GuardianSignup from './components/Guardian/GuardianSignup';
 import Signup from './components/Signup';
-import GuardianSignup from './components/GuardianSignup';
 import RoleSelect from './components/RoleSelect';
-import GuardianDashboard from './components/GuardianDashboard';
-import GuardianSettings from './components/GuardianSettings';
-import GuardianManageUser from './components/GuardianManageUser';
-import Camera from './Camera';
+import GuardianDashboard from './components/Guardian/GuardianDashboard';
+import GuardianSettings from './components/Guardian/GuardianSettings';
+import GuardianManageUser from './components/Guardian/GuardianManageUser';
+import Camera from '@/app/components/Camera/Camera';
 
 export default function App() {
     const [loggedIn, setLoggedIn] = React.useState(false);
@@ -19,8 +20,7 @@ export default function App() {
     if (!loggedIn) {
         if (!role) return <RoleSelect onSelectRole={setRole} />;
         if (signingUp) {
-            if (role === 'user') return <Signup onBackToLogin={() => setSigningUp(false)} />;
-            if (role === 'guardian') return <GuardianSignup onBackToLogin={() => setSigningUp(false)} />;
+            return (<Signup role={role} onBackToLogin={() => setSigningUp(false)} /> );
         }
         return (
             <LoginScreen

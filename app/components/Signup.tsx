@@ -1,23 +1,42 @@
+// components/Signup.tsx
 import React, { useState } from 'react';
 import {
-    View, Text, TextInput, TouchableOpacity, StyleSheet,
+    View,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    StyleSheet,
 } from 'react-native';
 import CheckBox from '@react-native-community/checkbox';
 
 type Props = {
     onBackToLogin: () => void;
+    role: 'user' | 'guardian';
 };
 
-const Signup: React.FC<Props> = ({ onBackToLogin }) => {
+const Signup: React.FC<Props> = ({ onBackToLogin, role }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [confirm, setConfirm] = useState('');
     const [agreed, setAgreed] = useState(false);
 
-    const handleRegister = () => {
-        if (!agreed) return alert('Please agree to the Data Privacy Notice');
-        if (password !== confirm) return alert('Passwords do not match!');
-        alert('Signed up successfully');
+    // derive text based on role
+    const headerText = role === 'guardian' ? 'GUARDIAN SIGN UP' : 'SIGN UP';
+    const successMessage =
+        role === 'guardian'
+            ? 'Guardian signed up successfully'
+            : 'Signed up successfully';
+    const pwdMismatchMessage =
+        role === 'guardian' ? 'Passwords do not match' : 'Passwords do not match!';
+
+    const handleSignup = () => {
+        if (!agreed) {
+            return alert('Please agree to the Data Privacy Notice');
+        }
+        if (password !== confirm) {
+            return alert(pwdMismatchMessage);
+        }
+        alert(successMessage);
         onBackToLogin();
     };
 
@@ -30,7 +49,7 @@ const Signup: React.FC<Props> = ({ onBackToLogin }) => {
                 </TouchableOpacity>
             </View>
 
-            <Text style={styles.header}>SIGN UP</Text>
+            <Text style={styles.header}>{headerText}</Text>
 
             <Text style={styles.label}>Email</Text>
             <TextInput
@@ -69,8 +88,8 @@ const Signup: React.FC<Props> = ({ onBackToLogin }) => {
                 </Text>
             </View>
 
-            <TouchableOpacity onPress={handleRegister} style={styles.registerBtn}>
-                <Text style={styles.registerText}>Sign Up</Text>
+            <TouchableOpacity onPress={handleSignup} style={styles.signupBtn}>
+                <Text style={styles.signupText}>Sign Up</Text>
             </TouchableOpacity>
 
             <TouchableOpacity onPress={onBackToLogin} style={styles.backIcon}>
@@ -137,14 +156,14 @@ const styles = StyleSheet.create({
     privacyLink: {
         textDecorationLine: 'underline',
     },
-    registerBtn: {
+    signupBtn: {
         backgroundColor: 'white',
         paddingVertical: 14,
         borderRadius: 8,
         alignItems: 'center',
         marginBottom: 40,
     },
-    registerText: {
+    signupText: {
         color: '#1786d9',
         fontSize: 18,
         fontWeight: 'bold',

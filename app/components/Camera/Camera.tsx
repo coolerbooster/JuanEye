@@ -19,7 +19,7 @@ export default function CameraScreen({ onBackToMenu }: Props) {
     const { hasPermission, requestPermission } = useCameraPermission();
     const device = useCameraDevice('back');
     const camRef = useRef<Camera>(null);
-    const tf = useTensorflowModel(require('../assets/model.tflite'));
+    const tf = useTensorflowModel(require('../../../assets/model.tflite'));
     const net = tf.state === 'loaded' ? tf.model : undefined;
 
     const [labels, setLabels] = useState<string[]>([]);
@@ -30,7 +30,7 @@ export default function CameraScreen({ onBackToMenu }: Props) {
     useEffect(() => { requestPermission(); }, []);
     useEffect(() => {
         const loadLabels = async () => {
-            const asset = Asset.fromModule(require('../assets/labels.txt'));
+            const asset = Asset.fromModule(require('../../../assets/labels.txt'));
             await asset.downloadAsync();
             const txt = await FileSystem.readAsStringAsync(asset.localUri ?? asset.uri);
             setLabels(txt.split(/\r?\n/).map(l => l.trim()).filter(Boolean));
