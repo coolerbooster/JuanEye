@@ -1,4 +1,4 @@
-// src/components/Signup.tsx
+// src/components/LoginScreen.tsx
 import React, { useState } from 'react';
 import {
     View,
@@ -7,44 +7,28 @@ import {
     TouchableOpacity,
     StyleSheet,
 } from 'react-native';
-import CheckBox from '@react-native-community/checkbox';
 import * as authService from '../services/authService'; // ← import
 
 type Props = {
-    onBackToLogin: () => void;
+    onLogin: () => void;
+    onSignup: () => void;
+    onBack: () => void;
+    onForgot: () => void;
     role: 'user' | 'guardian';
 };
 
-const Signup: React.FC<Props> = ({ onBackToLogin, role }) => {
+const LoginScreen: React.FC<Props> = ({ onLogin, onSignup, onBack, onForgot, role }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [confirm, setConfirm] = useState('');
-    const [agreed, setAgreed] = useState(false);
 
-    // derive text based on role
-    const headerText = role === 'guardian' ? 'GUARDIAN SIGN UP' : 'SIGN UP';
-    const successMessage =
-        role === 'guardian'
-            ? 'Guardian signed up successfully'
-            : 'Signed up successfully';
-    const pwdMismatchMessage = 'Passwords do not match!';
-
-    const handleSignup = async () => {
-        if (!agreed) {
-            return alert('Please agree to the Data Privacy Notice');
-        }
-        if (password !== confirm) {
-            return alert(pwdMismatchMessage);
+    const handleLogin = async () => {
+        if (!email || !password) {
+            alert('Email and password are required.');
+            return;
         }
         try {
-            // pass accountType = "Guardian" or "User"
-            await authService.signup(
-                email,
-                password,
-                role === 'guardian' ? 'Guardian' : 'User'
-            );
-            alert(successMessage);
-            onBackToLogin();
+            await authService.login(email, password); // ← use service
+            onLogin();
         } catch (err: any) {
             alert(err.message);
         }
@@ -54,12 +38,14 @@ const Signup: React.FC<Props> = ({ onBackToLogin, role }) => {
         <View style={styles.container}>
             <View style={styles.headerRow}>
                 <Text style={styles.logoText}>JuanEye 👁️</Text>
-                <TouchableOpacity onPress={onBackToLogin}>
-                    <Text style={styles.link}>Login</Text>
+                <TouchableOpacity onPress={onSignup}>
+                    <Text style={styles.link}>Sign Up</Text>
                 </TouchableOpacity>
             </View>
 
-            <Text style={styles.header}>{headerText}</Text>
+            <Text style={styles.header}>
+                {role === 'guardian' ? 'GUARDIAN LOGIN' : 'LOGIN'}
+            </Text>
 
             <Text style={styles.label}>Email</Text>
             <TextInput
@@ -82,35 +68,22 @@ const Signup: React.FC<Props> = ({ onBackToLogin, role }) => {
                 secureTextEntry
             />
 
-            <Text style={styles.label}>Confirm Password</Text>
-            <TextInput
-                style={styles.input}
-                value={confirm}
-                onChangeText={setConfirm}
-                placeholder="Confirm Password"
-                placeholderTextColor="#4d4d4d"
-                secureTextEntry
-            />
-
-            <View style={styles.checkboxRow}>
-                <CheckBox value={agreed} onValueChange={setAgreed} />
-                <Text style={styles.privacyText}>
-                    Read <Text style={styles.privacyLink}>Data Privacy Notice</Text>
-                </Text>
-            </View>
-
-            <TouchableOpacity onPress={handleSignup} style={styles.signupBtn}>
-                <Text style={styles.signupText}>Sign Up</Text>
+            <TouchableOpacity onPress={onForgot}>
+                <Text style={styles.recover}>Recover Password</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={onBackToLogin} style={styles.backIcon}>
-                <Text style={{ fontSize: 32, color: 'white' }}>❮</Text>
+            <TouchableOpacity style={styles.loginBtn} onPress={handleLogin}>
+                <Text style={styles.loginText}>Login</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={onBack} style={styles.backIcon}>
+                <Text style={{ fontSize: 24, color: 'white' }}>❮</Text>
             </TouchableOpacity>
         </View>
     );
 };
 
-export default Signup;
+export default LoginScreen;
 
 const styles = StyleSheet.create({
     container: {
@@ -154,34 +127,26 @@ const styles = StyleSheet.create({
         marginBottom: 16,
         color: '#000',
     },
-    checkboxRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 30,
-    },
-    privacyText: {
+    recover: {
         color: 'white',
-        marginLeft: 8,
-        fontSize: 13,
-    },
-    privacyLink: {
         textDecorationLine: 'underline',
+        fontSize: 13,
+        marginBottom: 20,
     },
-    signupBtn: {
+    loginBtn: {
         backgroundColor: 'white',
         paddingVertical: 14,
         borderRadius: 8,
         alignItems: 'center',
-        marginBottom: 40,
     },
-    signupText: {
+    loginText: {
         color: '#1786d9',
         fontSize: 18,
         fontWeight: 'bold',
     },
     backIcon: {
         position: 'absolute',
-        bottom: 60,
+        bottom: 30,
         left: 20,
     },
 });

@@ -1,10 +1,10 @@
 // src/index.tsx
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import LoginScreen from './components/Auth/LoginScreen';
-import Signup from './components/Auth/Signup';
-import ForgotPassword from './components/Auth/ForgotPassword';
-import RoleSelect from './components/RoleSelect';
+import LoginScreen from './components/Credentials/LoginScreen';
+import Signup from './components/Credentials/Signup';
+import ForgotPassword from './components/Credentials/ForgotPassword';
+import RoleSelect from './components/Credentials/RoleSelect';
 import GuardianDashboard from './components/Guardian/GuardianDashboard';
 import GuardianSettings from './components/Guardian/GuardianSettings';
 import GuardianManageUser from './components/Guardian/GuardianManageUser';
@@ -19,7 +19,9 @@ export default function App() {
     const [managingUser, setManagingUser] = React.useState(false);
 
     if (!loggedIn) {
-        if (!role) return <RoleSelect onSelectRole={setRole} />;
+        if (!role) {
+            return <RoleSelect onSelectRole={setRole} />;
+        }
         if (forgotPassword) {
             return (
                 <ForgotPassword
@@ -77,7 +79,15 @@ export default function App() {
         return <GuardianDashboard onSettings={() => setGuardianInSettings(true)} />;
     }
 
-    return <Camera />;
+    // --- User (non-guardian) flow: show Camera,
+    return (
+        <Camera
+            onBackToMenu={() => {
+                setLoggedIn(false);
+                setRole(null);
+            }}
+        />
+    );
 }
 
 const styles = StyleSheet.create({
