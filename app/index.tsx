@@ -1,80 +1,52 @@
-// index.tsx
+// src/index.tsx
 import React from 'react';
-import { StyleSheet } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
-import LoginScreen from './components/LoginScreen';
-import Signup from './components/Credentials/Signup';
-import ResetPassword from './components/Credentials/ResetPassword';
+import { View, Text, StyleSheet } from 'react-native';
+import LoginScreen from './components/Auth/LoginScreen';
+import Signup from './components/Auth/Signup';
+import ForgotPassword from './components/Auth/ForgotPassword';
 import RoleSelect from './components/RoleSelect';
 import GuardianDashboard from './components/Guardian/GuardianDashboard';
 import GuardianSettings from './components/Guardian/GuardianSettings';
 import GuardianManageUser from './components/Guardian/GuardianManageUser';
-import Camera from './components/Camera/Camera';
+import Camera from '@/app/components/Camera/Camera';
 
 export default function App() {
     const [loggedIn, setLoggedIn] = React.useState(false);
     const [signingUp, setSigningUp] = React.useState(false);
-    const [recovering, setRecovering] = React.useState(false);
+    const [forgotPassword, setForgotPassword] = React.useState(false);
     const [role, setRole] = React.useState<null | 'user' | 'guardian'>(null);
     const [guardianInSettings, setGuardianInSettings] = React.useState(false);
     const [managingUser, setManagingUser] = React.useState(false);
 
-    // store credentials for prefill
-    const [prefillEmail, setPrefillEmail] = React.useState<string>('');
-    const [prefillPassword, setPrefillPassword] = React.useState<string>('');
-
-    const handleLogin = async (token: string) => {
-        await AsyncStorage.setItem('token', token);
-        setLoggedIn(true);
-    };
-
-    const handleSignupSuccess = (email: string, password: string) => {
-        setPrefillEmail(email);
-        setPrefillPassword(password);
-        setSigningUp(false);
-    };
-
-    const handleRecoverBack = () => {
-        setRecovering(false);
-    };
-
-    const handleRecoverSuccess = () => {
-        setRecovering(false);
-        // optionally show a toast: "Please login with new password"
-    };
-
-    // Pre-login:
     if (!loggedIn) {
         if (!role) return <RoleSelect onSelectRole={setRole} />;
-        if (signingUp) {
-            return <Signup onSignupSuccess={handleSignupSuccess} onBack={() => setSigningUp(false)} />;
+        if (forgotPassword) {
+            return (
+                <ForgotPassword
+                    role={role}
+                    onBack={() => setForgotPassword(false)}
+                />
+            );
         }
-        if (recovering) {
-            return <ResetPassword onBack={handleRecoverBack} onSuccess={handleRecoverSuccess} />;
+        if (signingUp) {
+            return (
+                <Signup
+                    role={role}
+                    onBackToLogin={() => setSigningUp(false)}
+                />
+            );
         }
         return (
             <LoginScreen
                 role={role}
-                initialEmail={prefillEmail}
-                initialPassword={prefillPassword}
-                onLogin={handleLogin}
-                onSignup={() => {
-                    setPrefillEmail('');
-                    setPrefillPassword('');
-                    setSigningUp(true);
-                }}
-                onRecover={() => setRecovering(true)}
-                onBack={() => {
-                    setRole(null);
-                    setPrefillEmail('');
-                    setPrefillPassword('');
-                }}
+                onLogin={() => setLoggedIn(true)}
+                onSignup={() => setSigningUp(true)}
+                onForgot={() => setForgotPassword(true)}
+                onBack={() => setRole(null)}
             />
         );
     }
 
-    // Guardian flows:
     if (role === 'guardian') {
         if (guardianInSettings) {
             if (managingUser) {
@@ -105,11 +77,10 @@ export default function App() {
         return <GuardianDashboard onSettings={() => setGuardianInSettings(true)} />;
     }
 
-    // Regular user:
     return <Camera />;
 }
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: 'black' },
-    center:    { flex: 1, alignItems: 'center', justifyContent: 'center' },
+    center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 });

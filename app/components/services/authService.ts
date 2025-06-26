@@ -1,86 +1,76 @@
-// services/authService.ts
-import { API_URL } from "./config";
+// src/services/authService.ts
+// centralize all auth-related HTTP calls
 
-export interface LoginResponse { token: string; }
-export async function login(
-    email: string,
-    password: string
-): Promise<LoginResponse> {
-    const res = await fetch(`${API_URL}/api/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+const API_BASE = 'http://192.168.50.48:3001'; // ← adjust to your backend host
+
+export interface AuthResponse {
+    token?: string;
+    userId?: number;
+    message?: string;
+    error?: string;
+}
+
+/**
+ * POST /api/auth/login
+ */
+export async function login(email: string, password: string): Promise<AuthResponse> {
+    const res = await fetch(`${API_BASE}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
     });
-
-    if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: "Unknown error" }));
-        throw new Error(err.error || "Login failed");
-    }
-
-    return res.json();
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Login failed');
+    return data;
 }
 
-export interface SignupResponse {
-    message: string;
-    userId: number;
-    token: string;
-}
+/**
+ * POST /api/auth/signup
+ * Now accepts accountType
+ */
 export async function signup(
     email: string,
-    password: string
-): Promise<SignupResponse> {
-    const res = await fetch(`${API_URL}/api/auth/signup`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+    password: string,
+    accountType: 'Guardian' | 'User'
+): Promise<AuthResponse> {
+    const res = await fetch(`${API_BASE}/api/auth/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, accountType }),
     });
-
-    if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: "Unknown error" }));
-        throw new Error(err.error || "Signup failed");
-    }
-
-    return res.json();
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Signup failed');
+    return data;
 }
 
-export interface ForgotPasswordResponse {
-    message: string;
-}
-export async function forgotPassword(
-    email: string
-): Promise<ForgotPasswordResponse> {
-    const res = await fetch(`${API_URL}/api/auth/forgot-password`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+/**
+ * POST /api/auth/forgot-password
+ */
+export async function requestOTP(email: string): Promise<AuthResponse> {
+    const res = await fetch(`${API_BASE}/api/auth/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
     });
-
-    if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: "Unknown error" }));
-        throw new Error(err.error || "Forgot password failed");
-    }
-
-    return res.json();
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not send OTP.');
+    return data;
 }
 
-export interface ResetPasswordResponse {
-    message: string;
-}
+/**
+ * POST /api/auth/reset-password
+ */
 export async function resetPassword(
     email: string,
     codeValue: string,
     newPassword: string
-): Promise<ResetPasswordResponse> {
-    const res = await fetch(`${API_URL}/api/auth/reset-password`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+): Promise<AuthResponse> {
+    const res = await fetch(`${API_BASE}/api/auth/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, codeValue, newPassword }),
     });
-
-    if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: "Unknown error" }));
-        throw new Error(err.error || "Reset password failed");
-    }
-
-    return res.json();
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not reset password.');
+    return data;
 }
