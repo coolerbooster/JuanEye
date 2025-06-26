@@ -8,14 +8,12 @@ import {
     StyleSheet,
     ActivityIndicator,
 } from "react-native";
-import { login } from "../components/services/authService";
-
-// We no longer import ResetPassword or Signup here — navigation is handled by the parent (index.tsx).
+import { login } from "../services/authService";
+import ResetPassword from "../Credentials/ResetPassword";
 
 type Props = {
     onLogin: (token: string) => void;
-    onSignup: () => void;      // callback to show Signup screen
-    onRecover: () => void;     // callback to show ResetPassword flow
+    onSignup: () => void;
     onBack: () => void;
     role: "user" | "guardian";
     initialEmail?: string;
@@ -25,7 +23,6 @@ type Props = {
 const LoginScreen: React.FC<Props> = ({
                                           onLogin,
                                           onSignup,
-                                          onRecover,
                                           onBack,
                                           role,
                                           initialEmail = "",
@@ -34,6 +31,7 @@ const LoginScreen: React.FC<Props> = ({
     const [email, setEmail] = useState(initialEmail);
     const [password, setPassword] = useState(initialPassword);
     const [loading, setLoading] = useState(false);
+    const [resetMode, setResetMode] = useState(false);
 
     const handleLogin = async () => {
         setLoading(true);
@@ -47,14 +45,21 @@ const LoginScreen: React.FC<Props> = ({
         }
     };
 
+    if (resetMode) {
+        return (
+            <ResetPassword
+                email={email}
+                onBack={() => setResetMode(false)}
+                onSuccess={() => setResetMode(false)}
+            />
+        );
+    }
+
     return (
         <View style={styles.container}>
             <View style={styles.headerRow}>
                 <Text style={styles.logoText}>JuanEye 👁️</Text>
-                <TouchableOpacity
-                    onPress={onSignup}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                >
+                <TouchableOpacity onPress={onSignup}>
                     <Text style={styles.link}>Sign Up</Text>
                 </TouchableOpacity>
             </View>
@@ -84,10 +89,7 @@ const LoginScreen: React.FC<Props> = ({
                 secureTextEntry
             />
 
-            <TouchableOpacity
-                onPress={onRecover}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
+            <TouchableOpacity onPress={() => setResetMode(true)}>
                 <Text style={styles.recover}>Recover Password</Text>
             </TouchableOpacity>
 
@@ -103,11 +105,7 @@ const LoginScreen: React.FC<Props> = ({
                 )}
             </TouchableOpacity>
 
-            <TouchableOpacity
-                onPress={onBack}
-                style={styles.backIcon}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
+            <TouchableOpacity onPress={onBack} style={styles.backIcon}>
                 <Text style={{ fontSize: 24, color: "white" }}>❮</Text>
             </TouchableOpacity>
         </View>
@@ -137,7 +135,6 @@ const styles = StyleSheet.create({
     link: {
         color: "white",
         textDecorationLine: "underline",
-        fontSize: 16,
     },
     header: {
         color: "white",
@@ -170,7 +167,6 @@ const styles = StyleSheet.create({
         paddingVertical: 14,
         borderRadius: 8,
         alignItems: "center",
-        marginBottom: 20,
     },
     loginText: {
         color: "#1786d9",
