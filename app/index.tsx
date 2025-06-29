@@ -1,6 +1,6 @@
 // src/index.tsx
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
 import LoginScreen from './components/Credentials/LoginScreen';
 import Signup from './components/Credentials/Signup';
 import ForgotPassword from './components/Credentials/ForgotPassword';
@@ -8,7 +8,8 @@ import RoleSelect from './components/Credentials/RoleSelect';
 import GuardianDashboard from './components/Guardian/GuardianDashboard';
 import GuardianSettings from './components/Guardian/GuardianSettings';
 import GuardianManageUser from './components/Guardian/GuardianManageUser';
-import Camera from '@/app/components/Camera/Camera';
+import Camera from './components/Camera/Camera';
+import CameraSettings from './components/Camera/CameraSettings';
 
 export default function App() {
     const [loggedIn, setLoggedIn] = React.useState(false);
@@ -17,27 +18,12 @@ export default function App() {
     const [role, setRole] = React.useState<null | 'user' | 'guardian'>(null);
     const [guardianInSettings, setGuardianInSettings] = React.useState(false);
     const [managingUser, setManagingUser] = React.useState(false);
+    const [cameraInSettings, setCameraInSettings] = React.useState(false);
 
     if (!loggedIn) {
-        if (!role) {
-            return <RoleSelect onSelectRole={setRole} />;
-        }
-        if (forgotPassword) {
-            return (
-                <ForgotPassword
-                    role={role}
-                    onBack={() => setForgotPassword(false)}
-                />
-            );
-        }
-        if (signingUp) {
-            return (
-                <Signup
-                    role={role}
-                    onBackToLogin={() => setSigningUp(false)}
-                />
-            );
-        }
+        if (!role) return <RoleSelect onSelectRole={setRole} />;
+        if (forgotPassword) return <ForgotPassword role={role} onBack={() => setForgotPassword(false)} />;
+        if (signingUp) return <Signup role={role} onBackToLogin={() => setSigningUp(false)} />;
         return (
             <LoginScreen
                 role={role}
@@ -79,13 +65,27 @@ export default function App() {
         return <GuardianDashboard onSettings={() => setGuardianInSettings(true)} />;
     }
 
-    // --- User (non-guardian) flow: show Camera,
+    if (cameraInSettings) {
+        return (
+            <CameraSettings
+                pairedDevices={[]}
+                onUnpair={() => {}}
+                onToggleOCR={() => {}}
+                onToggleFilter={() => {}}
+                onPairToGuardian={() => {}}
+                onSubscribePremium={() => {}}
+                onClose={() => setCameraInSettings(false)}
+            />
+        );
+    }
+
     return (
         <Camera
             onBackToMenu={() => {
                 setLoggedIn(false);
                 setRole(null);
             }}
+            onSettings={() => setCameraInSettings(true)}
         />
     );
 }

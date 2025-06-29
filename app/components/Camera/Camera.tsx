@@ -1,5 +1,5 @@
-import React, { useRef, useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, Pressable } from 'react-native';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator, Image } from 'react-native';
 import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
 import MlkitOcr from 'react-native-mlkit-ocr';
 import { useTensorflowModel } from 'react-native-fast-tflite';
@@ -9,10 +9,13 @@ import { Asset } from 'expo-asset';
 import jpeg from 'jpeg-js';
 import { Buffer } from 'buffer';
 import { decodeBoxes } from './Detector';
+import CameraUI from './CameraUI';
+import CameraSettings from './CameraSettings';
+import { Feather } from '@expo/vector-icons';
 
 global.Buffer ||= Buffer;
 
-type Props = { onBackToMenu: () => void; };
+type Props = { onBackToMenu: () => void };
 
 export default function CameraScreen({ onBackToMenu }: Props) {
     const { hasPermission, requestPermission } = useCameraPermission();
@@ -21,56 +24,45 @@ export default function CameraScreen({ onBackToMenu }: Props) {
     const tf = useTensorflowModel(require('../../../assets/model.tflite'));
     const net = tf.state === 'loaded' ? tf.model : undefined;
 
+    const [showSettings, setShowSettings] = useState(false);
     const [labels, setLabels] = useState<string[]>([]);
     const [busy, setBusy] = useState(false);
-    const [best, setBest] = useState<string | null>(null);
     const [ocrText, setOcrText] = useState<string | null>(null);
     const [boxes, setBoxes] = useState<any[]>([]);
 
-    useEffect(() => { requestPermission(); }, []);
     useEffect(() => {
-        async function load() {
+        requestPermission();
+    }, [requestPermission]);
+
+    useEffect(() => {
+        async function loadLabels() {
             const asset = Asset.fromModule(require('../../../assets/labels.txt'));
             await asset.downloadAsync();
-            const txt = await FileSystem.readAsStringAsync(asset.localUri ?? asset.uri);
-            setLabels(txt.split(/\r?\n/).map(l => l.trim()).filter(Boolean));
+            const content = await FileSystem.readAsStringAsync(asset.localUri ?? asset.uri);
+            setLabels(content.split(/\r?\n/).map(l => l.trim()).filter(Boolean));
         }
-        load();
+        loadLabels();
     }, []);
 
     const shoot = useCallback(async () => {
-        if (!camRef.current || !net || labels.length === 0) return;
+        if (!camRef.current || !net || !labels.length) return;
         setBusy(true);
         try {
-            console.log('--- Shoot Start ---');
-
-            // 1) Capture photo
-            const p = await camRef.current.takePhoto({});
-            const originalUri = 'file://' + p.path;
-            console.log('Original URI:', originalUri);
-
-            // 2) OCR using MlkitOcr
+            const photo = await camRef.current.takePhoto({});
+            const uri = 'file://' + photo.path;
             try {
-                const ocrResult = await MlkitOcr.detectFromUri(originalUri);
-                console.log('OCR blocks:', ocrResult);
-                const textStr = ocrResult.map(b => b.text).join(' ');
-                setOcrText(textStr);
-            } catch (ocrErr) {
-                console.error('OCR failed:', ocrErr);
+                const ocr = await MlkitOcr.detectFromUri(uri);
+                setOcrText(ocr.map(b => b.text).join(' '));
+            } catch {
                 setOcrText(null);
             }
-
-            // 3) Resize for detection
-            const { uri: resizedUri } = await ImageManipulator.manipulateAsync(
-                originalUri,
+            const { uri: resized } = await ImageManipulator.manipulateAsync(
+                uri,
                 [{ resize: { width: 640, height: 640 } }],
                 { format: ImageManipulator.SaveFormat.JPEG }
             );
-            console.log('Resized URI:', resizedUri);
-
-            // 4) Object detection
-            const base64 = await FileSystem.readAsStringAsync(resizedUri, { encoding: FileSystem.EncodingType.Base64 });
-            const buf = Buffer.from(base64, 'base64');
+            const b64 = await FileSystem.readAsStringAsync(resized, { encoding: FileSystem.EncodingType.Base64 });
+            const buf = Buffer.from(b64, 'base64');
             const { data } = jpeg.decode(buf, { useTArray: true });
             const rgb = new Float32Array((data.length / 4) * 3);
             for (let i = 0, j = 0; i < data.length; i += 4) {
@@ -78,24 +70,37 @@ export default function CameraScreen({ onBackToMenu }: Props) {
                 rgb[j++] = data[i + 1] / 255;
                 rgb[j++] = data[i + 2] / 255;
             }
-            const out = net.runSync([rgb]);
+            const out = (net as any).runSync([rgb]);
             const bb = decodeBoxes(out[0] as Float32Array, labels);
-            console.log('Detection boxes:', bb);
             setBoxes(bb);
-            setBest(bb[0]?.clsName ?? null);
-
-            console.log('--- Shoot End ---');
         } catch (e) {
-            console.error('Error in shoot:', e);
+            console.warn(e);
         } finally {
             setBusy(false);
         }
     }, [net, labels]);
 
+    const toggleFlash = useCallback(() => console.log('Toggle flash'), []);
+    const onSettings = useCallback(() => setShowSettings(true), []);
+
+    if (showSettings) {
+        return (
+            <CameraSettings
+                pairedDevices={[]}
+                onUnpair={() => {}}
+                onToggleOCR={() => {}}
+                onToggleFilter={() => {}}
+                onPairToGuardian={() => {}}
+                onSubscribePremium={() => {}}
+                onClose={() => setShowSettings(false)}
+            />
+        );
+    }
+
     if (!hasPermission || !device) {
         return (
             <View style={styles.center}>
-                <Text>No camera permission or device</Text>
+                <Text>No camera permission</Text>
             </View>
         );
     }
@@ -104,48 +109,45 @@ export default function CameraScreen({ onBackToMenu }: Props) {
         <View style={styles.container}>
             <Camera
                 ref={camRef}
+                style={StyleSheet.absoluteFill}
                 device={device}
                 isActive
                 photo
-                style={StyleSheet.absoluteFill}
             />
+
+            <View style={styles.topBlackBar} />
+            <View style={styles.bottomBlackBar} />
+
             {boxes.map((b, i) => (
-                <View
-                    key={i}
-                    style={[
-                        styles.box,
-                        {
-                            left: `${b.x1 * 100}%`,
-                            top: `${b.y1 * 100}%`,
-                            width: `${(b.x2 - b.x1) * 100}%`,
-                            height: `${(b.y2 - b.y1) * 100}%`,
-                        },
-                    ]}
-                >
-                    <Text style={styles.boxTxt}>
-                        {b.clsName} {b.cnf.toFixed(2)}
-                    </Text>
+                <View key={i} style={[styles.box, { left: `${b.x1 * 100}%`, top: `${b.y1 * 100}%`, width: `${(b.x2 - b.x1) * 100}%`, height: `${(b.y2 - b.y1) * 100}%` }]}>
+                    <Text style={styles.boxTxt}>{b.clsName} {b.cnf.toFixed(2)}</Text>
                 </View>
             ))}
-            <Pressable onPress={shoot} style={styles.shutter}>
-                <Text style={{ fontSize: 32 }}>📸</Text>
-            </Pressable>
-            {best && (
-                <View style={styles.badge}>
-                    <Text style={styles.badgeTxt}>{best}</Text>
-                </View>
-            )}
-            {ocrText && (
-                <View style={styles.ocrBadge}>
-                    <Text style={styles.ocrText}>{ocrText}</Text>
-                </View>
-            )}
-            {(busy || tf.state === 'loading' || labels.length === 0) && (
-                <ActivityIndicator size="large" color="white" style={styles.center} />
-            )}
-            {tf.state === 'error' && (
-                <Text style={[styles.center, { color: 'red' }]}>Model error: {tf.error.message}</Text>
-            )}
+
+            <CameraUI
+                onShutter={shoot}
+                onToggleFlash={toggleFlash}
+                onSettings={onSettings}
+                iconSize={32}
+                iconOffset={80}
+            />
+
+            <View style={styles.pageIndicatorContainer}>
+                <View style={styles.pageDotActive}><Text style={styles.dotText}>1</Text></View>
+                <View style={styles.pageDot}><Text style={styles.dotText}>2</Text></View>
+                <View style={styles.pageDot}><Text style={styles.dotText}>3</Text></View>
+            </View>
+
+            <View style={styles.swipeContainer}>
+                <Feather name="chevron-up" size={20} color="white" />
+                <Text style={styles.swipeText}>Swipe Up To Settings</Text>
+            </View>
+
+            <View style={styles.notificationIconContainer}>
+                <Image source={{ uri: 'https://img.icons8.com/ios-filled/50/ffffff/appointment-reminders--v1.png' }} style={styles.notificationIcon} />
+            </View>
+
+            {(busy || tf.state === 'loading' || !labels.length) && <ActivityIndicator style={styles.center} size="large" color="white" />}
         </View>
     );
 }
@@ -153,41 +155,16 @@ export default function CameraScreen({ onBackToMenu }: Props) {
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: 'black' },
     center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-    shutter: {
-        position: 'absolute',
-        bottom: 40,
-        alignSelf: 'center',
-        width: 72,
-        height: 72,
-        borderRadius: 36,
-        backgroundColor: '#ffffff88',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    badge: {
-        position: 'absolute',
-        top: 60,
-        alignSelf: 'center',
-        backgroundColor: '#000000aa',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 16,
-    },
-    badgeTxt: { color: '#fff', fontSize: 18 },
-    box: { position: 'absolute', borderWidth: 2, borderColor: 'red' },
-    boxTxt: {
-        color: '#fff',
-        fontSize: 12,
-        backgroundColor: '#ff0000aa',
-        paddingHorizontal: 2,
-    },
-    ocrBadge: {
-        position: 'absolute',
-        bottom: 150,
-        alignSelf: 'center',
-        backgroundColor: '#000000aa',
-        padding: 10,
-        borderRadius: 8,
-    },
-    ocrText: { color: '#fff', fontSize: 16, textAlign: 'center' },
+    topBlackBar: { position: 'absolute', top: 0, width: '100%', height: 115, backgroundColor: 'black', zIndex: 1 },
+    bottomBlackBar: { position: 'absolute', bottom: 0, width: '100%', height: 160, backgroundColor: 'black', zIndex: 1 },
+    box: { position: 'absolute', borderWidth: 2, borderColor: 'yellow' },
+    boxTxt: { color: 'yellow', fontSize: 12, backgroundColor: 'rgba(0,0,0,0.6)', padding: 4 },
+    pageIndicatorContainer: { position: 'absolute', bottom: 80, width: '100%', flexDirection: 'row', justifyContent: 'center' },
+    pageDot: { width: 24, height: 24, borderRadius: 12, backgroundColor: 'black', alignItems: 'center', justifyContent: 'center', margin: 4 },
+    pageDotActive: { width: 24, height: 24, borderRadius: 12, backgroundColor: 'white', alignItems: 'center', justifyContent: 'center', margin: 4 },
+    dotText: { color: 'black', fontSize: 12, fontWeight: 'bold' },
+    swipeContainer: { position: 'absolute', bottom: 60, width: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
+    swipeText: { color: 'white', fontSize: 14, marginLeft: 6 },
+    notificationIconContainer: { position: 'absolute', top: 60, right: 20, zIndex: 2 },
+    notificationIcon: { width: 36, height: 36 },
 });
