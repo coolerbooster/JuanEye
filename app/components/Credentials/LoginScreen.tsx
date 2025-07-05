@@ -23,11 +23,23 @@ const LoginScreen: React.FC<Props> = ({ onLogin, onSignup, onBack, onForgot, rol
 
     const handleLogin = async () => {
         if (!email || !password) {
-            alert('Email and password are required.');
+            alert('Email and password are required...');
             return;
         }
         try {
-            await authService.login(email, password); // ← use service
+            // perform login
+            await authService.login(email, password);
+
+            // fetch profile to check accountType
+            const profile = await authService.getProfile();
+            const expectedType = role === 'guardian' ? 'Guardian' : 'User';
+
+            if (profile.accountType !== expectedType) {
+                // if mismatch, show error and do not proceed
+                alert(`User Account type is not ${expectedType}.`);
+                return;
+            }
+
             onLogin();
         } catch (err: any) {
             alert(err.message);
