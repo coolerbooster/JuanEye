@@ -16,6 +16,7 @@
     "@infinitered/react-native-mlkit-document-scanner": "^3.1.0",
     "@react-native-async-storage/async-storage": "^2.2.0",
     "@react-native-community/checkbox": "^0.5.20",
+    "@react-native-community/datetimepicker": "^8.4.2",
     "@react-native-picker/picker": "^2.11.0",
     "@react-native/metro-config": "^0.80.0",
     "@react-navigation/bottom-tabs": "^7.3.10",

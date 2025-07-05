@@ -11,6 +11,10 @@ export interface AuthResponse {
     error?: string;
 }
 
+export interface ScanStats {
+    objectScanCount: number;
+    ocrScanCount: number;
+}
 /**
  * POST /api/auth/login
  */
@@ -488,4 +492,35 @@ export async function confirmGuardianBind(
     }
 
     return await res.json() as { message: string };
+}
+
+/**
+ * GET /api/user/guardian/scan-stats
+ * Optional query params: startDate, endDate in YYYY-MM-DD
+ */
+export async function getScanStats(
+    startDate?: string,
+    endDate?: string
+): Promise<ScanStats> {
+    const token = await AsyncStorage.getItem('token');
+    if (!token) throw new Error('Authentication expired. Please log in again.');
+
+    const params = new URLSearchParams();
+    if (startDate) params.append('startDate', startDate);
+    if (endDate)   params.append('endDate', endDate);
+
+    const url = `${API_BASE}/api/user/guardian/scan-stats${params.toString() ? `?${params}` : ''}`;
+    const res = await fetch(url, {
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+        },
+    });
+
+    if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || `Failed to fetch scan stats (${res.status})`);
+    }
+
+    return (await res.json()) as ScanStats;
 }
