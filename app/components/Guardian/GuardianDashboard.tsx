@@ -1,3 +1,4 @@
+// src/components/GuardianDashboard.tsx
 import React, { useState, useEffect } from 'react';
 import {
     View,
@@ -19,7 +20,7 @@ export type Scan = {
 
 type Props = {
     userId: number;
-    userEmail: string;                   // ← new prop
+    userEmail: string;
     onSettings: () => void;
     onEdit: (scan: Scan) => void;
 };
@@ -70,16 +71,14 @@ const GuardianDashboard: React.FC<Props> = ({
             {/* Header */}
             <View style={styles.header}>
                 <Text style={styles.logo}>JuanEye 👁️</Text>
-                <TouchableOpacity onPress={onSettings}>
-                    <Text style={styles.gearIcon}>⚙️</Text>
-                </TouchableOpacity>
             </View>
 
-            {/* Subheader now shows email */}
+            {/* Subheader shows the selected user’s email */}
             <Text style={styles.subHeader}>
                 Showing scans for: {userEmail}
             </Text>
 
+            {/* Loading indicator */}
             {loading && (
                 <ActivityIndicator
                     size="large"
@@ -87,12 +86,14 @@ const GuardianDashboard: React.FC<Props> = ({
                     style={{ marginTop: 20 }}
                 />
             )}
+            {/* Error message */}
             {error && <Text style={styles.errorText}>{error}</Text>}
 
+            {/* List of scans */}
             {!loading && !error && (
                 <FlatList
                     data={scans}
-                    keyExtractor={(item) => item.scanId.toString()}
+                    keyExtractor={item => item.scanId.toString()}
                     contentContainerStyle={{ paddingHorizontal: 20 }}
                     renderItem={renderItem}
                     ListEmptyComponent={
@@ -105,10 +106,12 @@ const GuardianDashboard: React.FC<Props> = ({
 
             {/* Bottom bar */}
             <View style={styles.bottomBar}>
-                <Text style={styles.bottomIcon}>⚙️</Text>
-                <TouchableOpacity onPress={() => alert('Scan triggered')}>
-                    <View style={styles.scanButton} />
+                <TouchableOpacity onPress={onSettings}>
+                    <Text style={styles.bottomIcon}>⚙️</Text>
                 </TouchableOpacity>
+                {/*<TouchableOpacity onPress={() => alert('Scan triggered')}>*/}
+                {/*    <View style={styles.scanButton} />*/}
+                {/*</TouchableOpacity>*/}
             </View>
         </View>
     );
@@ -125,8 +128,6 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
         borderBottomLeftRadius: 20,
         borderBottomRightRadius: 20,
-        flexDirection: 'row',
-        justifyContent: 'space-between',
         alignItems: 'center',
     },
     logo: { color: 'white', fontWeight: 'bold', fontSize: 16 },
@@ -136,7 +137,6 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
         paddingVertical: 8,
     },
-    gearIcon: { fontSize: 20, color: 'white' },
     itemRow: {
         borderBottomColor: '#1786d9',
         borderBottomWidth: 1,
