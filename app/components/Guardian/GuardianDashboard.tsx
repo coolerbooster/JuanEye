@@ -1,4 +1,3 @@
-// src/components/GuardianDashboard.tsx
 import React, { useState, useEffect } from 'react';
 import {
     View,
@@ -10,12 +9,6 @@ import {
 } from 'react-native';
 import { getUserScans } from '../services/authService';
 
-type Props = {
-    userId: number;
-    onSettings: () => void;
-    onEdit: (scan: Scan) => void;     // ← new
-};
-
 export type Scan = {
     scanId: number;
     name: string;
@@ -24,7 +17,19 @@ export type Scan = {
     createdAt: string;
 };
 
-const GuardianDashboard: React.FC<Props> = ({ userId, onSettings, onEdit }) => {
+type Props = {
+    userId: number;
+    userEmail: string;                   // ← new prop
+    onSettings: () => void;
+    onEdit: (scan: Scan) => void;
+};
+
+const GuardianDashboard: React.FC<Props> = ({
+                                                userId,
+                                                userEmail,
+                                                onSettings,
+                                                onEdit,
+                                            }) => {
     const [scans, setScans] = useState<Scan[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -49,15 +54,20 @@ const GuardianDashboard: React.FC<Props> = ({ userId, onSettings, onEdit }) => {
     const renderItem = ({ item }: { item: Scan }) => (
         <TouchableOpacity
             style={styles.itemRow}
-            onPress={() => onEdit(item)}    // ← navigate to edit
+            onPress={() => onEdit(item)}
         >
-            <Text style={styles.itemText}>{`${item.scanId} | ${item.name}`}</Text>
-            {item.type === 'Unknown' && <Text style={styles.questionMark}>?</Text>}
+            <Text style={styles.itemText}>
+                {`${item.scanId} | ${item.name}`}
+            </Text>
+            {item.type === 'Unknown' && (
+                <Text style={styles.questionMark}>?</Text>
+            )}
         </TouchableOpacity>
     );
 
     return (
         <View style={styles.container}>
+            {/* Header */}
             <View style={styles.header}>
                 <Text style={styles.logo}>JuanEye 👁️</Text>
                 <TouchableOpacity onPress={onSettings}>
@@ -65,7 +75,10 @@ const GuardianDashboard: React.FC<Props> = ({ userId, onSettings, onEdit }) => {
                 </TouchableOpacity>
             </View>
 
-            <Text style={styles.subHeader}>Showing scans for user ID: {userId}</Text>
+            {/* Subheader now shows email */}
+            <Text style={styles.subHeader}>
+                Showing scans for: {userEmail}
+            </Text>
 
             {loading && (
                 <ActivityIndicator
@@ -83,11 +96,14 @@ const GuardianDashboard: React.FC<Props> = ({ userId, onSettings, onEdit }) => {
                     contentContainerStyle={{ paddingHorizontal: 20 }}
                     renderItem={renderItem}
                     ListEmptyComponent={
-                        <Text style={styles.noDataText}>No scans found.</Text>
+                        <Text style={styles.noDataText}>
+                            No scans found.
+                        </Text>
                     }
                 />
             )}
 
+            {/* Bottom bar */}
             <View style={styles.bottomBar}>
                 <Text style={styles.bottomIcon}>⚙️</Text>
                 <TouchableOpacity onPress={() => alert('Scan triggered')}>

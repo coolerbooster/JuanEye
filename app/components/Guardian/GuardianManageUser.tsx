@@ -10,21 +10,20 @@ import {
 import { Picker } from '@react-native-picker/picker';
 import { getBoundUsers } from '../services/authService';
 
-type Props = {
-    onBack: () => void;
-    // now onProceed takes a number
-    onProceed: (selectedUserId: number) => void;
-};
-
 type BoundUser = {
     user_id: number;
     email: string;
 };
 
+type Props = {
+    onBack: () => void;
+    onProceed: (selectedUserId: number, selectedEmail: string) => void;
+};
+
 const GuardianManageUser: React.FC<Props> = ({ onBack, onProceed }) => {
     const [users, setUsers] = useState<BoundUser[]>([]);
-    // only keep the numeric ID
     const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+    const [selectedEmail, setSelectedEmail] = useState<string>('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -32,14 +31,12 @@ const GuardianManageUser: React.FC<Props> = ({ onBack, onProceed }) => {
         const fetchUsers = async () => {
             setError(null);
             setLoading(true);
-
             try {
                 const data = await getBoundUsers();
                 setUsers(data);
-
                 if (data.length) {
-                    // default selection
                     setSelectedUserId(data[0].user_id);
+                    setSelectedEmail(data[0].email);
                 }
             } catch (err: any) {
                 console.log('GuardianManageUser: getBoundUsers error', err);
@@ -48,7 +45,6 @@ const GuardianManageUser: React.FC<Props> = ({ onBack, onProceed }) => {
                 setLoading(false);
             }
         };
-
         fetchUsers();
     }, []);
 
@@ -65,22 +61,27 @@ const GuardianManageUser: React.FC<Props> = ({ onBack, onProceed }) => {
             <Text style={styles.label}>USER</Text>
 
             {loading && (
-                <ActivityIndicator size="large" color="#ffffff" style={{ marginVertical: 20 }} />
+                <ActivityIndicator
+                    size="large"
+                    color="#ffffff"
+                    style={{ marginVertical: 20 }}
+                />
             )}
             {error && <Text style={styles.errorText}>{error}</Text>}
 
             {!loading && !error && Platform.OS === 'android' && (
                 <View style={styles.pickerWrapper}>
                     <Picker
-                        // Convert the selectedUserId back to string for Picker
                         selectedValue={selectedUserId?.toString()}
-                        onValueChange={value => {
+                        onValueChange={(value) => {
                             const id = parseInt(value, 10);
                             setSelectedUserId(id);
+                            const u = users.find((u) => u.user_id === id);
+                            setSelectedEmail(u?.email ?? '');
                         }}
                         style={styles.picker}
                     >
-                        {users.map(u => (
+                        {users.map((u) => (
                             <Picker.Item
                                 key={u.user_id}
                                 label={`${u.user_id} | ${u.email}`}
@@ -91,19 +92,17 @@ const GuardianManageUser: React.FC<Props> = ({ onBack, onProceed }) => {
                 </View>
             )}
 
-            {!loading && !error && Platform.OS !== 'android' && (
-                <Text style={{ color: 'white' }}>(Dropdown visible only on Android for now)</Text>
-            )}
-
             <TouchableOpacity
-                style={[styles.button, (loading || !selectedUserId) && styles.disabledBtn]}
+                style={[
+                    styles.button,
+                    (!selectedUserId || loading) && styles.disabledBtn,
+                ]}
                 onPress={() => {
-                    if (selectedUserId !== null) {
-                        console.log('Proceed with ID:', selectedUserId);
-                        onProceed(selectedUserId);
+                    if (selectedUserId) {
+                        onProceed(selectedUserId, selectedEmail);
                     }
                 }}
-                disabled={loading || !selectedUserId}
+                disabled={!selectedUserId || loading}
             >
                 <Text style={styles.buttonText}>PROCEED</Text>
             </TouchableOpacity>

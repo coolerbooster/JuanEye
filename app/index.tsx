@@ -1,4 +1,3 @@
-// src/index.tsx
 import React from 'react';
 import { StyleSheet } from 'react-native';
 
@@ -22,31 +21,18 @@ export default function App() {
     const [role, setRole] = React.useState<null | 'user' | 'guardian'>(null);
 
     const [selectedUserId, setSelectedUserId] = React.useState<number | null>(null);
+    const [selectedUserEmail, setSelectedUserEmail] = React.useState<string>('');
     const [selectedScan, setSelectedScan] = React.useState<Scan | null>(null);
     const [guardianInSettings, setGuardianInSettings] = React.useState(false);
     const [cameraInSettings, setCameraInSettings] = React.useState(false);
 
     // Not logged in flows
     if (!loggedIn) {
-        if (!role) {
-            return <RoleSelect onSelectRole={setRole} />;
-        }
-        if (forgotPassword) {
-            return (
-                <ForgotPassword
-                    role={role}
-                    onBack={() => setForgotPassword(false)}
-                />
-            );
-        }
-        if (signingUp) {
-            return (
-                <Signup
-                    role={role}
-                    onBackToLogin={() => setSigningUp(false)}
-                />
-            );
-        }
+        if (!role) return <RoleSelect onSelectRole={setRole} />;
+        if (forgotPassword)
+            return <ForgotPassword role={role} onBack={() => setForgotPassword(false)} />;
+        if (signingUp)
+            return <Signup role={role} onBackToLogin={() => setSigningUp(false)} />;
         return (
             <LoginScreen
                 role={role}
@@ -60,22 +46,21 @@ export default function App() {
 
     // Guardian flows
     if (role === 'guardian') {
-        // 1) Select which user to manage
+        // 1) select user
         if (selectedUserId === null) {
             return (
                 <GuardianManageUser
-                    onBack={() => {
-                        /* you could logout or go back to role select */
-                    }}
-                    onProceed={(userId) => {
-                        setSelectedUserId(userId);
+                    onBack={() => {}}
+                    onProceed={(id, email) => {
+                        setSelectedUserId(id);
+                        setSelectedUserEmail(email);
                     }}
                 />
             );
         }
 
-        // 2) If a scan is tapped, show the edit screen
-        if (selectedScan !== null) {
+        // 2) edit scan
+        if (selectedScan) {
             return (
                 <UpdateScanScreen
                     route={{ params: { scan: selectedScan } }}
@@ -84,7 +69,7 @@ export default function App() {
             );
         }
 
-        // 3) Guardian settings (logout / manage user)
+        // 3) settings
         if (guardianInSettings) {
             return (
                 <GuardianSettings
@@ -93,27 +78,30 @@ export default function App() {
                         setLoggedIn(false);
                         setRole(null);
                         setSelectedUserId(null);
+                        setSelectedUserEmail('');
                         setGuardianInSettings(false);
                     }}
                     onManageUser={() => {
-                        setSelectedUserId(null);
                         setGuardianInSettings(false);
+                        setSelectedUserId(null);
+                        setSelectedUserEmail('');
                     }}
                 />
             );
         }
 
-        // 4) Dashboard: list scans and allow tapping to edit
+        // 4) dashboard
         return (
             <GuardianDashboard
                 userId={selectedUserId}
+                userEmail={selectedUserEmail}
                 onSettings={() => setGuardianInSettings(true)}
                 onEdit={(scan) => setSelectedScan(scan)}
             />
         );
     }
 
-    // Camera settings flow (for regular User)
+    // Camera flows...
     if (cameraInSettings) {
         return (
             <CameraSettings
@@ -128,7 +116,6 @@ export default function App() {
         );
     }
 
-    // Default: camera view for User
     return (
         <Camera
             onBackToMenu={() => {
