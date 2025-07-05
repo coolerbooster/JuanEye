@@ -2,7 +2,8 @@
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const API_BASE = 'http://167.71.198.130:3001'; // ← adjust to your backend host
+// const API_BASE = 'http://167.71.198.130:3001'; // ← adjust to your backend host
+const API_BASE = 'http://192.168.1.3:3001'; // ← adjust to your backend host
 
 export interface AuthResponse {
     token?: string;
