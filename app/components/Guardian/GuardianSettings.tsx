@@ -178,13 +178,13 @@ export default function GuardianSettings({ onBack, onLogout, onManageUser }: Pro
                 ) : (
                     // Main settings and stats view
                     <>
-                        <Text style={styles.label}>Paired Devices:</Text>
-                        <View style={styles.row}>
-                            <Text style={styles.device}>Samsung Galaxy S24</Text>
-                            <Text style={styles.unpair}>Unpair</Text>
-                        </View>
+                        {/*<Text style={styles.label}>Paired Devices:</Text>*/}
+                        {/*<View style={styles.row}>*/}
+                        {/*    <Text style={styles.device}>Samsung Galaxy S24</Text>*/}
+                        {/*    <Text style={styles.unpair}>Unpair</Text>*/}
+                        {/*</View>*/}
 
-                        <View style={styles.divider} />
+                        {/*<View style={styles.divider} />*/}
 
                         <Text style={styles.label}>History:</Text>
                         <View style={styles.dateRow}>
