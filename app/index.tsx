@@ -11,8 +11,7 @@ import GuardianDashboard, { Scan } from './components/Guardian/GuardianDashboard
 import UpdateScanScreen from './components/Guardian/UpdateScanScreen';
 import GuardianSettings from './components/Guardian/GuardianSettings';
 
-import Camera from './components/Camera/Camera';
-import CameraSettings from './components/Camera/CameraSettings';
+import CameraScreen from './components/Camera/Camera';
 
 export default function App() {
     const [loggedIn, setLoggedIn] = React.useState(false);
@@ -24,9 +23,7 @@ export default function App() {
     const [selectedUserEmail, setSelectedUserEmail] = React.useState<string>('');
     const [selectedScan, setSelectedScan] = React.useState<Scan | null>(null);
     const [guardianInSettings, setGuardianInSettings] = React.useState(false);
-    const [cameraInSettings, setCameraInSettings] = React.useState(false);
 
-    // Not logged in flows
     if (!loggedIn) {
         if (!role) return <RoleSelect onSelectRole={setRole} />;
         if (forgotPassword)
@@ -44,9 +41,7 @@ export default function App() {
         );
     }
 
-    // Guardian flows
     if (role === 'guardian') {
-        // 1) select user
         if (selectedUserId === null) {
             return (
                 <GuardianManageUser
@@ -58,8 +53,6 @@ export default function App() {
                 />
             );
         }
-
-        // 2) edit scan
         if (selectedScan) {
             return (
                 <UpdateScanScreen
@@ -68,8 +61,6 @@ export default function App() {
                 />
             );
         }
-
-        // 3) settings
         if (guardianInSettings) {
             return (
                 <GuardianSettings
@@ -89,42 +80,18 @@ export default function App() {
                 />
             );
         }
-
-        // 4) dashboard
         return (
             <GuardianDashboard
                 userId={selectedUserId}
                 userEmail={selectedUserEmail}
                 onSettings={() => setGuardianInSettings(true)}
-                onEdit={(scan) => setSelectedScan(scan)}
+                onEdit={setSelectedScan}
             />
         );
     }
 
-    // Camera flows...
-    if (cameraInSettings) {
-        return (
-            <CameraSettings
-                pairedDevices={[]}
-                onUnpair={() => {}}
-                onToggleOCR={() => {}}
-                onToggleFilter={() => {}}
-                onPairToGuardian={() => {}}
-                onSubscribePremium={() => {}}
-                onClose={() => setCameraInSettings(false)}
-            />
-        );
-    }
-
-    return (
-        <Camera
-            onBackToMenu={() => {
-                setLoggedIn(false);
-                setRole(null);
-            }}
-            onSettings={() => setCameraInSettings(true)}
-        />
-    );
+    // user → camera
+    return <CameraScreen onBackToMenu={() => { setLoggedIn(false); setRole(null); }} />;
 }
 
 const styles = StyleSheet.create({

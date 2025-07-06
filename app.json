@@ -42,10 +42,17 @@
           "backgroundColor": "#ffffff"
         }
       ],
-      "expo-asset"
-    ],
-    "experiments": {
-      "typedRoutes": true
-    }
+      "expo-asset","expo-asset",
+      [
+        "@jamsch/expo-speech-recognition",
+        {
+          "microphonePermission": "Allow Speech to text to use the microphone.",
+          "speechRecognitionPermission": "Allow Speech to Text to use speech recognition.",
+          "androidSpeechServicePackages": [
+            "com.google.android.googlequicksearchbox"
+          ]
+        }
+      ]
+    ]
   }
 }
