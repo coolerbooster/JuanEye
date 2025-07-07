@@ -1,3 +1,4 @@
+// CameraScreen.tsx
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
     View,
@@ -8,6 +9,8 @@ import {
     TouchableOpacity,
     LayoutChangeEvent,
     Alert,
+    ScrollView,   // ← for filter bar
+    Pressable,    // ← for tap-to-cycle
 } from 'react-native';
 import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
 import MlkitOcr from 'react-native-mlkit-ocr';
@@ -26,6 +29,16 @@ import {
     useSpeechRecognitionEvent,
 } from '@jamsch/expo-speech-recognition';
 import { createLLMPhoto, chatWithHistory } from '../services/authService';
+import * as Speech from 'expo-speech';  // ← for TTS
+
+// ← imports for filters
+import {
+    Grayscale,
+    Sepia,
+    Invert,
+    Contrast,
+    Brightness,
+} from 'react-native-color-matrix-image-filters';
 
 global.Buffer ||= Buffer;
 
@@ -41,9 +54,20 @@ export default function CameraScreen({ onBackToMenu, userEmail }: Props) {
     const tf = useTensorflowModel(require('../../../assets/model.tflite'));
     const net = tf.state === 'loaded' ? tf.model : undefined;
 
-    const [ocrEnabled, setOcrEnabled]       = useState(true);
-    const [mlEnabled, setMlEnabled]         = useState(true);
+    const [ocrEnabled, setOcrEnabled]       = useState(false);
+    const [mlEnabled, setMlEnabled]         = useState(false);
     const [filterEnabled, setFilterEnabled] = useState(false);
+    const [llmEnabled, setLlmEnabled]       = useState(true);
+
+    // ← new state for selected filter
+    const [filterType, setFilterType] = useState<'none'|'grayscale'|'sepia'|'invert'|'contrast'|'brightness'>('none');
+    const filterOrder = ['none','grayscale','sepia','invert','contrast','brightness'] as const;
+    // cycle through filterOrder on tap
+    const cycleFilter = () => {
+        const idx = filterOrder.indexOf(filterType);
+        const next = filterOrder[(idx + 1) % filterOrder.length];
+        setFilterType(next);
+    };
 
     const [labels, setLabels]       = useState<string[]>([]);
     const [ocrText, setOcrText]     = useState<string | null>(null);
@@ -69,13 +93,19 @@ export default function CameraScreen({ onBackToMenu, userEmail }: Props) {
 
     const doUpload = false;
 
+    // Speak the assistant's reply whenever it changes
     useEffect(() => {
-        console.log('[CameraScreen] mounted with userEmail:', userEmail);
+        if (chatAnswer && llmEnabled) {
+            Speech.speak(chatAnswer);
+        }
+    }, [chatAnswer, llmEnabled]);
+
+    useEffect(() => {
         requestPermission();
         ExpoSpeechRecognitionModule.requestPermissionsAsync().then(r => {
             if (!r.granted) console.warn('Speech permissions not granted', r);
         });
-    }, [requestPermission, userEmail]);
+    }, [requestPermission]);
 
     useEffect(() => {
         async function loadLabels() {
@@ -93,7 +123,7 @@ export default function CameraScreen({ onBackToMenu, userEmail }: Props) {
     });
     const handleSpeechPressOut = async () => {
         await ExpoSpeechRecognitionModule.stop();
-        if (speechText.trim()) {
+        if (speechText.trim() && llmEnabled) {
             await sendToChat(speechText);
         }
     };
@@ -187,31 +217,70 @@ export default function CameraScreen({ onBackToMenu, userEmail }: Props) {
 
     // PREVIEW MODE
     if (capturedUri) {
+        // helper to wrap image in selected filter
+        const FilteredImage = () => {
+            const img = <Image source={{ uri: capturedUri! }} style={styles.previewImage} />;
+            if (filterType === 'none') return img;
+            switch (filterType) {
+                case 'grayscale':  return <Grayscale>{img}</Grayscale>;
+                case 'sepia':      return <Sepia>{img}</Sepia>;
+                case 'invert':     return <Invert>{img}</Invert>;
+                case 'contrast':   return <Contrast amount={2}>{img}</Contrast>;
+                case 'brightness': return <Brightness amount={1.5}>{img}</Brightness>;
+                default:           return img;
+            }
+        };
+
         return (
             <View style={styles.previewContainer}>
-                <View
+                <Pressable
                     style={styles.previewImageWrapper}
+                    onPress={cycleFilter}  // ← tap cycles filter
                     onLayout={(e: LayoutChangeEvent) =>
                         setLayout({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })
                     }
                 >
-                    <Image source={{ uri: capturedUri }} style={styles.previewImage} />
+                    <FilteredImage />
+
                     {mlEnabled && layout.width > 0 && boxes.map((b, i) => (
                         <View
                             key={i}
                             style={{
-                                position:'absolute',
-                                borderWidth:2,
-                                borderColor:'yellow',
-                                left:   b.x1 * layout.width,
-                                top:    b.y1 * layout.height,
-                                width:  (b.x2 - b.x1) * layout.width,
+                                position: 'absolute',
+                                borderWidth: 2,
+                                borderColor: 'yellow',
+                                left: b.x1 * layout.width,
+                                top: b.y1 * layout.height,
+                                width: (b.x2 - b.x1) * layout.width,
                                 height: (b.y2 - b.y1) * layout.height,
                             }}
                         >
                             <Text style={styles.boxTxt}>{b.clsName} {b.cnf.toFixed(2)}</Text>
                         </View>
                     ))}
+                </Pressable>
+
+                {/* always show filter bar */}
+                <View style={styles.filterBar}>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                        {filterOrder.map(type => (
+                            <TouchableOpacity
+                                key={type}
+                                style={[
+                                    styles.filterButton,
+                                    filterType === type && styles.filterButtonActive,
+                                ]}
+                                onPress={() => setFilterType(type)}
+                            >
+                                <Text style={[
+                                    styles.filterText,
+                                    filterType === type && styles.filterTextActive,
+                                ]}>
+                                    {type}
+                                </Text>
+                            </TouchableOpacity>
+                        ))}
+                    </ScrollView>
                 </View>
 
                 <TouchableOpacity
@@ -223,36 +292,41 @@ export default function CameraScreen({ onBackToMenu, userEmail }: Props) {
                         setBoxes([]);
                         setConversationId(undefined);
                         setChatAnswer('');
+                        setFilterType('none');
                     }}
                 >
                     <Feather name="arrow-left" size={28} color="white" />
                 </TouchableOpacity>
 
-                <View style={styles.recordBtnContainer}>
-                    <TouchableOpacity onPressIn={handleSpeechPressIn} onPressOut={handleSpeechPressOut}>
-                        <Feather name="mic" size={36} color="white" />
-                    </TouchableOpacity>
-                    <Text style={styles.speechHint}>{recognizing ? 'Release to stop' : 'Hold to record'}</Text>
-                </View>
+                {llmEnabled && (
+                    <>
+                        <View style={styles.recordBtnContainer}>
+                            <TouchableOpacity onPressIn={handleSpeechPressIn} onPressOut={handleSpeechPressOut}>
+                                <Feather name="mic" size={36} color="white" />
+                            </TouchableOpacity>
+                            <Text style={styles.speechHint}>{recognizing ? 'Release to stop' : 'Hold to record'}</Text>
+                        </View>
+
+                        {speechText !== '' && (
+                            <View style={[styles.textOverlay, { bottom: 200 }]}>
+                                <Text style={styles.overlayLabel}>You:</Text>
+                                <Text style={styles.overlayText}>{speechText}</Text>
+                            </View>
+                        )}
+
+                        {chatAnswer !== '' && (
+                            <View style={[styles.textOverlay, { bottom: 140 }]}>
+                                <Text style={styles.overlayLabel}>Assistant:</Text>
+                                <Text style={styles.overlayText}>{chatAnswer}</Text>
+                            </View>
+                        )}
+                    </>
+                )}
 
                 {ocrEnabled && ocrText != null && (
                     <View style={styles.ocrOverlay}>
                         <Text style={styles.overlayLabel}>OCR:</Text>
                         <Text style={styles.overlayText}>{ocrText}</Text>
-                    </View>
-                )}
-
-                {speechText !== '' && (
-                    <View style={[styles.textOverlay, { bottom: 200 }]}>
-                        <Text style={styles.overlayLabel}>You:</Text>
-                        <Text style={styles.overlayText}>{speechText}</Text>
-                    </View>
-                )}
-
-                {chatAnswer !== '' && (
-                    <View style={[styles.textOverlay, { bottom: 140 }]}>
-                        <Text style={styles.overlayLabel}>Assistant:</Text>
-                        <Text style={styles.overlayText}>{chatAnswer}</Text>
                     </View>
                 )}
             </View>
@@ -268,9 +342,11 @@ export default function CameraScreen({ onBackToMenu, userEmail }: Props) {
                 ocrEnabled={ocrEnabled}
                 mlEnabled={mlEnabled}
                 filterEnabled={filterEnabled}
+                llmEnabled={llmEnabled}
                 onToggleOCR={setOcrEnabled}
                 onToggleML={setMlEnabled}
                 onToggleFilter={setFilterEnabled}
+                onToggleLLM={setLlmEnabled}
                 onPairToGuardian={() => {}}
                 onSubscribePremium={() => {}}
                 onClose={() => setSettings(false)}
@@ -334,4 +410,11 @@ const styles = StyleSheet.create({
     textOverlay:          { position:'absolute', left:20, right:20, backgroundColor:'rgba(0,0,0,0.6)', padding:8, borderRadius:6 },
     overlayLabel:         { color:'white', fontWeight:'bold' },
     overlayText:          { color:'white', marginTop:4 },
+
+    // ← styles for filter bar
+    filterBar:            { position: 'absolute', bottom: 0, width: '100%', paddingVertical: 8, backgroundColor: 'rgba(0,0,0,0.6)', zIndex:2 },
+    filterButton:         { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 4, borderWidth: 1, borderColor: 'white', marginHorizontal: 6 },
+    filterButtonActive:   { backgroundColor: 'white' },
+    filterText:           { color: 'white', fontSize: 12 },
+    filterTextActive:     { color: 'black' },
 });

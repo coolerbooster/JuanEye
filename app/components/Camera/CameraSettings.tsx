@@ -1,3 +1,4 @@
+// CameraSettings.tsx
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Switch, ScrollView } from 'react-native';
 import { Feather } from '@expo/vector-icons';
@@ -14,10 +15,12 @@ interface CameraSettingsProps {
     ocrEnabled: boolean;
     mlEnabled: boolean;
     filterEnabled: boolean;
+    llmEnabled: boolean;
 
     onToggleOCR: (enabled: boolean) => void;
     onToggleML: (enabled: boolean) => void;
     onToggleFilter: (enabled: boolean) => void;
+    onToggleLLM: (enabled: boolean) => void;
 
     onPairToGuardian: () => void;
     onSubscribePremium: () => void;
@@ -31,10 +34,12 @@ export default function CameraSettings({
                                            ocrEnabled,
                                            mlEnabled,
                                            filterEnabled,
+                                           llmEnabled,
 
                                            onToggleOCR,
                                            onToggleML,
                                            onToggleFilter,
+                                           onToggleLLM,
 
                                            onPairToGuardian,
                                            onSubscribePremium,
@@ -92,6 +97,16 @@ export default function CameraSettings({
                         <Switch
                             value={filterEnabled}
                             onValueChange={onToggleFilter}
+                            thumbColor="#fff"
+                            trackColor={{ false: '#777', true: '#0f0' }}
+                        />
+                    </View>
+
+                    <View style={styles.featureRow}>
+                        <Text style={styles.featureText}>LLM</Text>
+                        <Switch
+                            value={llmEnabled}
+                            onValueChange={onToggleLLM}
                             thumbColor="#fff"
                             trackColor={{ false: '#777', true: '#0f0' }}
                         />
