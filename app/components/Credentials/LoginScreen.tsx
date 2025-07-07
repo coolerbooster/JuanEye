@@ -1,4 +1,4 @@
-// src/components/LoginScreen.tsx
+// src/components/Credentials/LoginScreen.tsx
 import React, { useState } from 'react';
 import {
     View,
@@ -10,7 +10,8 @@ import {
 import * as authService from '../services/authService'; // ← import
 
 type Props = {
-    onLogin: () => void;
+    // unchanged: onLogin now receives both userId and email
+    onLogin: (userId: number, email: string) => void;
     onSignup: () => void;
     onBack: () => void;
     onForgot: () => void;
@@ -18,7 +19,7 @@ type Props = {
 };
 
 const LoginScreen: React.FC<Props> = ({ onLogin, onSignup, onBack, onForgot, role }) => {
-    const [email, setEmail] = useState('');
+    const [email, setEmail]       = useState('');
     const [password, setPassword] = useState('');
 
     const handleLogin = async () => {
@@ -27,10 +28,10 @@ const LoginScreen: React.FC<Props> = ({ onLogin, onSignup, onBack, onForgot, rol
             return;
         }
         try {
-            // perform login
+            // 1) perform login to get token
             await authService.login(email, password);
 
-            // fetch profile to check accountType
+            // 2) fetch profile (which includes user_id & email)
             const profile = await authService.getProfile();
             const expectedType = role === 'guardian' ? 'Guardian' : 'User';
 
@@ -40,7 +41,8 @@ const LoginScreen: React.FC<Props> = ({ onLogin, onSignup, onBack, onForgot, rol
                 return;
             }
 
-            onLogin();
+            // 3) PASS the real userId & email up to App.tsx
+            onLogin(profile.user_id, profile.email);
         } catch (err: any) {
             alert(err.message);
         }

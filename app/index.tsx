@@ -24,6 +24,9 @@ export default function App() {
     const [selectedScan, setSelectedScan] = React.useState<Scan | null>(null);
     const [guardianInSettings, setGuardianInSettings] = React.useState(false);
 
+    // ◀ New: persist the logged-in user’s email across *all* roles
+    const [currentUserEmail, setCurrentUserEmail] = React.useState<string>('');
+
     if (!loggedIn) {
         if (!role) return <RoleSelect onSelectRole={setRole} />;
         if (forgotPassword)
@@ -33,7 +36,11 @@ export default function App() {
         return (
             <LoginScreen
                 role={role}
-                onLogin={() => setLoggedIn(true)}
+                // now onLogin hands us back an email
+                onLogin={(userId: number, email: string) => {
+                    setLoggedIn(true);
+                    setCurrentUserEmail(email);
+                }}
                 onSignup={() => setSigningUp(true)}
                 onForgot={() => setForgotPassword(true)}
                 onBack={() => setRole(null)}
@@ -70,6 +77,7 @@ export default function App() {
                         setRole(null);
                         setSelectedUserId(null);
                         setSelectedUserEmail('');
+                        setCurrentUserEmail('');     // clear it on logout
                         setGuardianInSettings(false);
                     }}
                     onManageUser={() => {
@@ -90,8 +98,17 @@ export default function App() {
         );
     }
 
-    // user → camera
-    return <CameraScreen onBackToMenu={() => { setLoggedIn(false); setRole(null); }} />;
+    // user → camera: always pass the persisted email
+    return (
+        <CameraScreen
+            userEmail={currentUserEmail}
+            onBackToMenu={() => {
+                setLoggedIn(false);
+                setRole(null);
+                setCurrentUserEmail('');
+            }}
+        />
+    );
 }
 
 const styles = StyleSheet.create({

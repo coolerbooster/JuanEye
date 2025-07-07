@@ -3,11 +3,12 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // const API_BASE = 'http://167.71.198.130:3001'; // ← adjust to your backend host
-const API_BASE = 'http://192.168.1.3:3001'; // ← adjust to your backend host
+const API_BASE = 'http://192.168.50.40:3001'; // ← adjust to your backend host
 
 export interface AuthResponse {
     token?: string;
     userId?: number;
+    email?: string;
     message?: string;
     error?: string;
 }
@@ -16,6 +17,18 @@ export interface ScanStats {
     objectScanCount: number;
     ocrScanCount: number;
 }
+
+export interface LLMScanResponse {
+    message: string;
+    llm_id: number;
+    file: string;
+}
+
+export interface ChatResponse {
+    conversationId?: string;
+    answer: string;
+}
+
 /**
  * POST /api/auth/login
  */
@@ -524,4 +537,79 @@ export async function getScanStats(
     }
 
     return (await res.json()) as ScanStats;
+}
+
+/**
+ * GET /api/user/upload-llm-photo
+ * POST /api/user/upload-llm-photo
+ * Body: { title, description }, File: media (.mp4/.m4a/.mp3)
+ */
+export async function createLLMPhoto(
+    description: string,
+    media: { uri: string; name: string; type: string },
+    email: string
+): Promise<LLMScanResponse> {
+    const token = await AsyncStorage.getItem('token');
+    if (!token) throw new Error('Authentication expired. Please log in again.');
+
+    const formData = new FormData();
+    formData.append('description', description);
+    formData.append('media', {
+        uri: media.uri,
+        name: media.name,
+        type: media.type,
+    } as any);
+    formData.append('email', email);
+
+    const res = await fetch(`${API_BASE}/api/user/upload-llm-photo`, {
+        method: 'POST',
+        headers: {
+            Authorization: `Bearer ${token}`,
+            // Note: Do not set 'Content-Type' explicitly;
+            // the boundary header will be added automatically
+        },
+        body: formData,
+    });
+
+    if (!res.ok) {
+        const err = await res.json();
+        throw new Error(
+            err.error || err.message || `Failed to create LLM scan (${res.status})`
+        );
+    }
+
+    const data = await res.json();
+    return data as LLMScanResponse;
+}
+
+
+/**
+ * POST /api/user/llm-ask-question
+ * Body: { conversationId?: string; content: string; base64?: string }
+ */
+export async function chatWithHistory(
+    content: string,
+    base64?: string,
+    conversationId?: string
+): Promise<ChatResponse> {
+    const token = await AsyncStorage.getItem('token');
+    if (!token) throw new Error('Authentication expired. Please log in again.');
+
+    const payload: any = { content };
+    if (conversationId) payload.conversationId = conversationId;
+    if (base64)      payload.base64       = base64;
+
+    const res = await fetch(`${API_BASE}/api/user/llm-ask-question`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Chat request failed');
+
+    return data as ChatResponse;
 }
