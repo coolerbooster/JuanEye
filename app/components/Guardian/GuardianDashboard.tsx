@@ -10,13 +10,9 @@ import {
 } from 'react-native';
 import { getUserScans } from '../services/authService';
 
-export type Scan = {
-    scanId: number;
-    name: string;
-    text: string;
-    type: string;
-    createdAt: string;
-};
+export type Scan =
+    | { scanId: number; name: string; text: string; type: 'Object' | 'Text'; createdAt: string }
+    | { id: number; conversation_id: string; first_user_message: string; type: 'LLM'; createdAt: string };
 
 type Props = {
     userId: number;
@@ -52,19 +48,35 @@ const GuardianDashboard: React.FC<Props> = ({
         fetchScans();
     }, [userId]);
 
-    const renderItem = ({ item }: { item: Scan }) => (
-        <TouchableOpacity
-            style={styles.itemRow}
-            onPress={() => onEdit(item)}
-        >
-            <Text style={styles.itemText}>
-                {`${item.scanId} | ${item.name}`}
-            </Text>
-            {item.type === 'Unknown' && (
-                <Text style={styles.questionMark}>?</Text>
-            )}
-        </TouchableOpacity>
-    );
+    const renderItem = ({ item }: { item: Scan }) => {
+        if (item.type === 'LLM') {
+            return (
+                <TouchableOpacity
+                    style={styles.itemRow}
+                    onPress={() => onEdit(item)}
+                >
+                    <Text style={styles.itemText}>
+                        {`${item.id} | ${item.first_user_message}`}
+                    </Text>
+                </TouchableOpacity>
+            );
+        } else {
+            // @ts-ignore
+            return (
+                <TouchableOpacity
+                    style={styles.itemRow}
+                    onPress={() => onEdit(item)}
+                >
+                    <Text style={styles.itemText}>
+                        {`${item.scanId} | ${item.name}`}
+                    </Text>
+                    {item.type === 'Unknown' && (
+                        <Text style={styles.questionMark}>?</Text>
+                    )}
+                </TouchableOpacity>
+            );
+        }
+    };
 
     return (
         <View style={styles.container}>
@@ -93,7 +105,11 @@ const GuardianDashboard: React.FC<Props> = ({
             {!loading && !error && (
                 <FlatList
                     data={scans}
-                    keyExtractor={item => item.scanId.toString()}
+                    keyExtractor={item =>
+                        item.type === 'LLM'
+                            ? item.id.toString()
+                            : item.scanId.toString()
+                    }
                     contentContainerStyle={{ paddingHorizontal: 20 }}
                     renderItem={renderItem}
                     ListEmptyComponent={
@@ -109,9 +125,6 @@ const GuardianDashboard: React.FC<Props> = ({
                 <TouchableOpacity onPress={onSettings}>
                     <Text style={styles.bottomIcon}>⚙️</Text>
                 </TouchableOpacity>
-                {/*<TouchableOpacity onPress={() => alert('Scan triggered')}>*/}
-                {/*    <View style={styles.scanButton} />*/}
-                {/*</TouchableOpacity>*/}
             </View>
         </View>
     );
@@ -161,14 +174,6 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     bottomIcon: { fontSize: 28, color: 'white' },
-    scanButton: {
-        width: 24,
-        height: 24,
-        borderRadius: 12,
-        backgroundColor: '#00cc44',
-        borderWidth: 2,
-        borderColor: 'white',
-    },
     errorText: {
         color: '#d9534f',
         textAlign: 'center',

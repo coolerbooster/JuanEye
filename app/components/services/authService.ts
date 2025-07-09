@@ -18,15 +18,10 @@ export interface ScanStats {
     ocrScanCount: number;
 }
 
-export interface LLMScanResponse {
+export interface photoUploadResponse {
     message: string;
     llm_id: number;
     file: string;
-}
-
-export interface ChatResponse {
-    conversationId?: string;
-    answer: string;
 }
 
 /**
@@ -147,19 +142,22 @@ export async function getBoundUsers(): Promise<
 }
 
 /**
- * GET /api/user/scans/user
+ * GET /api/user/guardian/all-scans/user
  * Query: ?user_id=<number>
  */
 export async function getUserScans(
     userId: number
 ): Promise<
-    { scanId: number; name: string; text: string; type: string; createdAt: string }[]
+    (
+        | { scanId: number; name: string; text: string; type: 'Object' | 'Text'; createdAt: string }
+        | { id: number; conversation_id: string; first_user_message: string; type: 'LLM'; createdAt: string }
+        )[]
 > {
     const token = await AsyncStorage.getItem('token');
     if (!token) throw new Error('Authentication expired. Please log in again.');
 
     const res = await fetch(
-        `${API_BASE}/api/user/scans/user?user_id=${userId}`,
+        `${API_BASE}/api/user/guardian/all-scans/user?user_id=${userId}`,
         {
             headers: {
                 'Content-Type': 'application/json',
@@ -173,13 +171,10 @@ export async function getUserScans(
     }
 
     const body = await res.json();
-    return body as {
-        scanId: number;
-        name: string;
-        text: string;
-        type: string;
-        createdAt: string;
-    }[];
+    return body as (
+        | { scanId: number; name: string; text: string; type: 'Object' | 'Text'; createdAt: string }
+        | { id: number; conversation_id: string; first_user_message: string; type: 'LLM'; createdAt: string }
+        )[];
 }
 
 /**
@@ -540,15 +535,15 @@ export async function getScanStats(
 }
 
 /**
- * GET /api/user/upload-llm-photo
- * POST /api/user/upload-llm-photo
+ * GET /api/user/photo-upload
+ * POST /api/user/photo-upload
  * Body: { title, description }, File: media (.mp4/.m4a/.mp3)
  */
-export async function createLLMPhoto(
+export async function photoUpload(
     description: string,
     media: { uri: string; name: string; type: string },
     email: string
-): Promise<LLMScanResponse> {
+): Promise<photoUploadResponse> {
     const token = await AsyncStorage.getItem('token');
     if (!token) throw new Error('Authentication expired. Please log in again.');
 
@@ -561,12 +556,10 @@ export async function createLLMPhoto(
     } as any);
     formData.append('email', email);
 
-    const res = await fetch(`${API_BASE}/api/user/upload-llm-photo`, {
+    const res = await fetch(`${API_BASE}/api/user/photo-upload`, {
         method: 'POST',
         headers: {
             Authorization: `Bearer ${token}`,
-            // Note: Do not set 'Content-Type' explicitly;
-            // the boundary header will be added automatically
         },
         body: formData,
     });
@@ -579,37 +572,98 @@ export async function createLLMPhoto(
     }
 
     const data = await res.json();
-    return data as LLMScanResponse;
+    return data as photoUploadResponse;
 }
 
 
-/**
- * POST /api/user/llm-ask-question
- * Body: { conversationId?: string; content: string; base64?: string }
- */
-export async function chatWithHistory(
+export interface StreamFragment {
+    conversationId?: string;
+    answer?: string;
+    done: boolean;
+}
+
+export interface ChatResponse {
+    ok: boolean;
+    status: number;
+    data: {
+        conversationId: string;
+        answer: string;
+    } | null;
+}
+
+export function chatWithHistory(
     content: string,
     base64?: string,
-    conversationId?: string
+    conversationId?: string,
+    isStream: boolean = false,
+    onFragment?: (frag: StreamFragment) => void
 ): Promise<ChatResponse> {
-    const token = await AsyncStorage.getItem('token');
-    if (!token) throw new Error('Authentication expired. Please log in again.');
+    return new Promise(async (resolve, reject) => {
+        const token = await AsyncStorage.getItem('token');
+        if (!token) return reject(new Error('Authentication expired. Please log in again.'));
 
-    const payload: any = { content };
-    if (conversationId) payload.conversationId = conversationId;
-    if (base64)      payload.base64       = base64;
+        const payload: any = { content, isStream };
+        if (conversationId) payload.conversationId = conversationId;
+        if (base64)      payload.base64       = base64;
 
-    const res = await fetch(`${API_BASE}/api/user/llm-ask-question`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', `${API_BASE}/api/user/llm-ask-question`, true);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+
+        let buffer = '';
+        let lastIndex = 0;           // ← track how many chars we've already read
+        let streamingDone = false;
+
+        xhr.onreadystatechange = () => {
+            if (xhr.readyState === 2 && xhr.status === 404) {
+                reject(new Error(`Chat request failed (${xhr.status})`));
+            }
+        };
+
+        xhr.onprogress = () => {
+            if (!isStream) return;
+
+            // only grab the *new* text since the last event
+            const fullText = xhr.responseText;
+            const newChunk = fullText.substring(lastIndex);
+            lastIndex = fullText.length;
+
+            buffer += newChunk;
+            const parts = buffer.split('\n');
+            buffer = parts.pop()!;  // leave the trailing incomplete line
+
+            for (const line of parts) {
+                if (!line.trim()) continue;
+                try {
+                    const frag: StreamFragment = JSON.parse(line);
+                    onFragment?.(frag);
+                    if (frag.done) {
+                        streamingDone = true;
+                        xhr.abort();
+                    }
+                } catch {
+                    // ignore malformed JSON
+                }
+            }
+        };
+
+        xhr.onload = () => {
+            if (isStream) {
+                // streaming path ended via onprogress + abort
+                return resolve({ ok: true, status: xhr.status, data: null! });
+            }
+            // non‐streaming: parse entire response
+            try {
+                const json = JSON.parse(xhr.responseText);
+                console.log(json)
+                resolve(json as ChatResponse);
+            } catch {
+                reject(new Error('Invalid JSON response'));
+            }
+        };
+
+        xhr.onerror = () => reject(new Error('Network error'));
+        xhr.send(JSON.stringify(payload));
     });
-
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Chat request failed');
-
-    return data as ChatResponse;
 }

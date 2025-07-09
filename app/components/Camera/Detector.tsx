@@ -4,7 +4,7 @@ export type BoundingBox = {
     cnf:number; cls:number; clsName:string;
 };
 
-const CONF_TH = 0.3;
+const CONF_TH = 0.65;
 const IOU_TH = 0.5;
 const BOXES = 8400;
 const CHANS = 84;

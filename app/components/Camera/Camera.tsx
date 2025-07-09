@@ -9,8 +9,8 @@ import {
     TouchableOpacity,
     LayoutChangeEvent,
     Alert,
-    ScrollView,   // ← for filter bar
-    Pressable,    // ← for tap-to-cycle
+    ScrollView,
+    Pressable,
 } from 'react-native';
 import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
 import MlkitOcr from 'react-native-mlkit-ocr';
@@ -28,10 +28,13 @@ import {
     ExpoSpeechRecognitionModule,
     useSpeechRecognitionEvent,
 } from '@jamsch/expo-speech-recognition';
-import { createLLMPhoto, chatWithHistory } from '../services/authService';
-import * as Speech from 'expo-speech';  // ← for TTS
+import * as Speech from 'expo-speech'; // expo-speech import
 
-// ← imports for filters
+import {
+    chatWithHistory,
+    StreamFragment,
+} from '../services/authService';
+
 import {
     Grayscale,
     Sepia,
@@ -41,6 +44,9 @@ import {
 } from 'react-native-color-matrix-image-filters';
 
 global.Buffer ||= Buffer;
+
+// helper to sanitize LLM responses by removing asterisks
+const sanitizeText = (text: string) => text.replace(/\*/g, '');
 
 type Props = {
     onBackToMenu: () => void;
@@ -54,59 +60,100 @@ export default function CameraScreen({ onBackToMenu, userEmail }: Props) {
     const tf = useTensorflowModel(require('../../../assets/model.tflite'));
     const net = tf.state === 'loaded' ? tf.model : undefined;
 
-    const [ocrEnabled, setOcrEnabled]       = useState(false);
-    const [mlEnabled, setMlEnabled]         = useState(false);
+    // toggles
+    const [ocrEnabled, setOcrEnabled] = useState(false);
+    const [mlEnabled, setMlEnabled] = useState(false);
     const [filterEnabled, setFilterEnabled] = useState(false);
-    const [llmEnabled, setLlmEnabled]       = useState(true);
+    const [llmEnabled, setLlmEnabled] = useState(true);
+    const [torchEnabled, setTorchEnabled] = useState(false); // added torch state
 
-    // ← new state for selected filter
-    const [filterType, setFilterType] = useState<'none'|'grayscale'|'sepia'|'invert'|'contrast'|'brightness'>('none');
+    // filter cycle
     const filterOrder = ['none','grayscale','sepia','invert','contrast','brightness'] as const;
-    // cycle through filterOrder on tap
+    const [filterType, setFilterType] = useState<typeof filterOrder[number]>('none');
     const cycleFilter = () => {
         const idx = filterOrder.indexOf(filterType);
-        const next = filterOrder[(idx + 1) % filterOrder.length];
-        setFilterType(next);
+        setFilterType(filterOrder[(idx + 1) % filterOrder.length]);
     };
 
-    const [labels, setLabels]       = useState<string[]>([]);
-    const [ocrText, setOcrText]     = useState<string | null>(null);
-    const [boxes, setBoxes]         = useState<any[]>([]);
-    const [busy, setBusy]           = useState(false);
+    // ML / OCR state
+    const [labels, setLabels] = useState<string[]>([]);
+    const [ocrText, setOcrText] = useState<string | null>(null);
+    const [boxes, setBoxes] = useState<any[]>([]);
+    const [busy, setBusy] = useState(false);
 
+    // captured image
     const [capturedUri, setCapturedUri] = useState<string | null>(null);
-    const [layout, setLayout]           = useState({ width: 0, height: 0 });
+    const [layout, setLayout] = useState({ width: 0, height: 0 });
 
+    // speech-to-text
     const [recognizing, setRecognizing] = useState(false);
-    const [speechText, setSpeechText]   = useState<string>('');
-    useSpeechRecognitionEvent('start',  () => setRecognizing(true));
-    useSpeechRecognitionEvent('end',    () => setRecognizing(false));
-    useSpeechRecognitionEvent('result', e => setSpeechText(e.results.map(r => r.transcript).join(' ')));
-    useSpeechRecognitionEvent('error',  e => {
+    const [speechText, setSpeechText] = useState<string>('');
+    const speechRef = useRef<string>('');
+
+    // chat state
+    const [conversationId, setConversationId] = useState<string|undefined>(undefined);
+    const [chatFragments, setChatFragments] = useState<string[]>([]);
+    const [streaming, setStreaming] = useState(false);
+    const [pendingResponse, setPendingResponse] = useState(false);
+
+    // helper for delays
+    const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+    // speech event handlers
+    useSpeechRecognitionEvent('start', () => setRecognizing(true));
+    useSpeechRecognitionEvent('end', () => setRecognizing(false));
+    useSpeechRecognitionEvent('error', e => {
         console.warn('Speech error:', e.error, e.message);
         setRecognizing(false);
     });
+    useSpeechRecognitionEvent('result', e => {
+        const transcript = e.results.map(r => r.transcript).join(' ');
+        speechRef.current = transcript;
+        setSpeechText(transcript);
+    });
 
-    // chat state
-    const [conversationId, setConversationId] = useState<string | undefined>(undefined);
-    const [chatAnswer, setChatAnswer]         = useState<string>('');
+    const handleSpeechPressIn = () => {
+        Speech.stop();               // stop any ongoing TTS when mic is pressed again
+        setStreaming(false);         // reset streaming flag
+        setPendingResponse(false);   // reset pending flag
+        setChatFragments([]);        // clear any previous fragments
+        setSpeechText('');
+        speechRef.current = '';
+        ExpoSpeechRecognitionModule.start({
+            lang: 'en-US',
+            interimResults: true,
+            continuous: false,
+            requiresOnDeviceRecognition: false,
+            addsPunctuation: false,
+        });
+    };
 
-    const doUpload = false;
-
-    // Speak the assistant's reply whenever it changes
-    useEffect(() => {
-        if (chatAnswer && llmEnabled) {
-            Speech.speak(chatAnswer);
+    // ← Updated: append OCR text when enabled
+    const handleSpeechPressOut = async () => {
+        Speech.stop();               // ensure TTS is halted before sending
+        await ExpoSpeechRecognitionModule.stop();
+        await delay(500);
+        const final = speechRef.current.trim();
+        // build the full text, including OCR if enabled
+        let textToSend = final;
+        if (ocrEnabled && ocrText) {
+            textToSend += ` OCR:"${ocrText}"`;
         }
-    }, [chatAnswer, llmEnabled]);
+        if (textToSend && llmEnabled) {
+            setSpeechText(final);
+            await delay(2500);
+            sendToChat(textToSend, false);
+        }
+    };
 
+    // permissions
     useEffect(() => {
         requestPermission();
-        ExpoSpeechRecognitionModule.requestPermissionsAsync().then(r => {
-            if (!r.granted) console.warn('Speech permissions not granted', r);
-        });
+        ExpoSpeechRecognitionModule.requestPermissionsAsync()
+            .then(r => { if (!r.granted) console.warn('Speech permissions not granted', r); });
     }, [requestPermission]);
 
+    // load labels
     useEffect(() => {
         async function loadLabels() {
             const asset = Asset.fromModule(require('../../../assets/labels.txt'));
@@ -117,33 +164,59 @@ export default function CameraScreen({ onBackToMenu, userEmail }: Props) {
         loadLabels();
     }, []);
 
-    const handleSpeechPressIn = () => ExpoSpeechRecognitionModule.start({
-        lang: 'en-US', interimResults: true, continuous: false,
-        requiresOnDeviceRecognition: false, addsPunctuation: false,
-    });
-    const handleSpeechPressOut = async () => {
-        await ExpoSpeechRecognitionModule.stop();
-        if (speechText.trim() && llmEnabled) {
-            await sendToChat(speechText);
-        }
-    };
+    async function sendToChat(text: string, useStream = false) {
+        console.log('sendToChat()', { text, useStream, conversationId });
+        setChatFragments([]);
+        setPendingResponse(true);
+        if (useStream) setStreaming(true);
 
-    async function sendToChat(text: string) {
+        const base64String = capturedUri
+            ? await FileSystem.readAsStringAsync(capturedUri, { encoding: FileSystem.EncodingType.Base64 })
+            : undefined;
+
         try {
-            const base64 = capturedUri
-                ? await FileSystem.readAsStringAsync(capturedUri, { encoding: FileSystem.EncodingType.Base64 })
-                : undefined;
-            const resp = await chatWithHistory(text, base64, conversationId);
-            if (resp.conversationId && !conversationId) {
-                setConversationId(resp.conversationId);
+            const result = await chatWithHistory(
+                text,
+                base64String,
+                conversationId,
+                useStream,
+                (frag: StreamFragment) => {
+                    if (frag.conversationId) setConversationId(frag.conversationId);
+                    if (typeof frag.answer === 'string') {
+                        const clean = sanitizeText(frag.answer);
+                        setChatFragments(prev => {
+                            const last = prev[prev.length - 1];
+                            if (clean !== last) {
+                                Speech.speak(clean);
+                                return [...prev, clean];
+                            }
+                            return prev;
+                        });
+                    }
+                    if (frag.done) {
+                        setStreaming(false);
+                        setPendingResponse(false);
+                    }
+                }
+            );
+
+            if (!useStream && result?.data?.answer) {
+                const { answer, conversationId: newConvId } = result.data;
+                const cleanAnswer = sanitizeText(answer);
+                if (newConvId) setConversationId(newConvId);
+                setChatFragments([cleanAnswer]);
+                Speech.speak(cleanAnswer);
+                setPendingResponse(false);
             }
-            setChatAnswer(resp.answer);
         } catch (err: any) {
-            console.error(err);
+            console.error('🚨 chatWithHistory error', err);
             Alert.alert('Chat Error', err.message);
+            setStreaming(false);
+            setPendingResponse(false);
         }
     }
 
+    // photo capture + OCR/ML
     const shoot = useCallback(async () => {
         if (!camRef.current) return;
         setBusy(true);
@@ -151,7 +224,6 @@ export default function CameraScreen({ onBackToMenu, userEmail }: Props) {
             const photo = await camRef.current.takePhoto({});
             const uri = 'file://' + photo.path;
 
-            // OCR
             if (ocrEnabled) {
                 try {
                     const ocr = await MlkitOcr.detectFromUri(uri);
@@ -163,9 +235,10 @@ export default function CameraScreen({ onBackToMenu, userEmail }: Props) {
                 setOcrText(null);
             }
 
-            if (recognizing) await ExpoSpeechRecognitionModule.stop();
+            if (recognizing) {
+                await ExpoSpeechRecognitionModule.stop();
+            }
 
-            // ML inference
             if (mlEnabled && net) {
                 const { uri: rsz } = await ImageManipulator.manipulateAsync(
                     uri,
@@ -177,9 +250,9 @@ export default function CameraScreen({ onBackToMenu, userEmail }: Props) {
                 const { data } = jpeg.decode(buf, { useTArray: true });
                 const rgb = new Float32Array((data.length / 4) * 3);
                 for (let i = 0, j = 0; i < data.length; i += 4) {
-                    rgb[j++] = data[i]   / 255;
-                    rgb[j++] = data[i+1] / 255;
-                    rgb[j++] = data[i+2] / 255;
+                    rgb[j++] = data[i] / 255;
+                    rgb[j++] = data[i + 1] / 255;
+                    rgb[j++] = data[i + 2] / 255;
                 }
                 const out = (net as any).runSync([rgb]);
                 setBoxes(decodeBoxes(out[0] as Float32Array, labels));
@@ -188,39 +261,20 @@ export default function CameraScreen({ onBackToMenu, userEmail }: Props) {
             }
 
             setCapturedUri(uri);
-
-            // AUTO UPLOAD if enabled
-            if (doUpload) {
-                try {
-                    const filename = uri.split('/').pop() || 'photo.jpg';
-                    const media    = { uri, name: filename, type: 'image/jpeg' };
-                    let description = 'Camera Photo';
-                    if (mlEnabled && boxes.length) {
-                        description = Array.from(new Set(boxes.map(b => b.clsName))).join(', ');
-                    }
-                    const resp = await createLLMPhoto(description, media, userEmail);
-                    Alert.alert('Upload Success', `Scan ID: ${resp.llm_id}`);
-                } catch (err: any) {
-                    console.error(err);
-                    Alert.alert('Upload Failed', err.message);
-                }
-            }
         } catch (e) {
             console.warn(e);
         } finally {
             setBusy(false);
         }
-    }, [ocrEnabled, mlEnabled, recognizing, net, labels, userEmail, boxes, doUpload]);
+    }, [ocrEnabled, mlEnabled, recognizing, net, labels]);
 
-    const toggleFlash = useCallback(() => console.log('Toggle flash'), []);
+    const toggleFlash = useCallback(() => setTorchEnabled(prev => !prev), []); // toggles torch
     const [showSettings, setSettings] = useState(false);
 
-    // PREVIEW MODE
+    // —— PREVIEW MODE ——
     if (capturedUri) {
-        // helper to wrap image in selected filter
         const FilteredImage = () => {
-            const img = <Image source={{ uri: capturedUri! }} style={styles.previewImage} />;
-            if (filterType === 'none') return img;
+            const img = <Image source={{ uri: capturedUri }} style={styles.previewImage}/>;
             switch (filterType) {
                 case 'grayscale':  return <Grayscale>{img}</Grayscale>;
                 case 'sepia':      return <Sepia>{img}</Sepia>;
@@ -235,23 +289,18 @@ export default function CameraScreen({ onBackToMenu, userEmail }: Props) {
             <View style={styles.previewContainer}>
                 <Pressable
                     style={styles.previewImageWrapper}
-                    onPress={cycleFilter}  // ← tap cycles filter
-                    onLayout={(e: LayoutChangeEvent) =>
-                        setLayout({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })
-                    }
+                    onPress={cycleFilter}
+                    onLayout={(e) => setLayout({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}
                 >
-                    <FilteredImage />
-
-                    {mlEnabled && layout.width > 0 && boxes.map((b, i) => (
+                    <FilteredImage/>
+                    {mlEnabled && layout.width > 0 && boxes.map((b,i) => (
                         <View
                             key={i}
                             style={{
-                                position: 'absolute',
-                                borderWidth: 2,
-                                borderColor: 'yellow',
-                                left: b.x1 * layout.width,
-                                top: b.y1 * layout.height,
-                                width: (b.x2 - b.x1) * layout.width,
+                                position:'absolute', borderWidth:2, borderColor:'yellow',
+                                left:   b.x1 * layout.width,
+                                top:    b.y1 * layout.height,
+                                width:  (b.x2 - b.x1) * layout.width,
                                 height: (b.y2 - b.y1) * layout.height,
                             }}
                         >
@@ -260,22 +309,15 @@ export default function CameraScreen({ onBackToMenu, userEmail }: Props) {
                     ))}
                 </Pressable>
 
-                {/* always show filter bar */}
                 <View style={styles.filterBar}>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                         {filterOrder.map(type => (
                             <TouchableOpacity
                                 key={type}
-                                style={[
-                                    styles.filterButton,
-                                    filterType === type && styles.filterButtonActive,
-                                ]}
+                                style={[ styles.filterButton, filterType===type && styles.filterButtonActive ]}
                                 onPress={() => setFilterType(type)}
                             >
-                                <Text style={[
-                                    styles.filterText,
-                                    filterType === type && styles.filterTextActive,
-                                ]}>
+                                <Text style={[ styles.filterText, filterType===type && styles.filterTextActive ]}>
                                     {type}
                                 </Text>
                             </TouchableOpacity>
@@ -286,54 +328,61 @@ export default function CameraScreen({ onBackToMenu, userEmail }: Props) {
                 <TouchableOpacity
                     style={styles.backPreviewButton}
                     onPress={() => {
+                        Speech.stop();            // stop any ongoing TTS
                         setCapturedUri(null);
                         setOcrText(null);
                         setSpeechText('');
                         setBoxes([]);
                         setConversationId(undefined);
-                        setChatAnswer('');
+                        setChatFragments([]);
                         setFilterType('none');
+                        setPendingResponse(false);
+                        setStreaming(false);      // ensure streaming flag is cleared
                     }}
                 >
-                    <Feather name="arrow-left" size={28} color="white" />
+                    <Feather name="arrow-left" size={28} color="white"/>
                 </TouchableOpacity>
 
                 {llmEnabled && (
-                    <>
-                        <View style={styles.recordBtnContainer}>
-                            <TouchableOpacity onPressIn={handleSpeechPressIn} onPressOut={handleSpeechPressOut}>
-                                <Feather name="mic" size={36} color="white" />
-                            </TouchableOpacity>
-                            <Text style={styles.speechHint}>{recognizing ? 'Release to stop' : 'Hold to record'}</Text>
-                        </View>
-
-                        {speechText !== '' && (
-                            <View style={[styles.textOverlay, { bottom: 200 }]}>
-                                <Text style={styles.overlayLabel}>You:</Text>
-                                <Text style={styles.overlayText}>{speechText}</Text>
-                            </View>
-                        )}
-
-                        {chatAnswer !== '' && (
-                            <View style={[styles.textOverlay, { bottom: 140 }]}>
-                                <Text style={styles.overlayLabel}>Assistant:</Text>
-                                <Text style={styles.overlayText}>{chatAnswer}</Text>
-                            </View>
-                        )}
-                    </>
+                    <View style={styles.recordBtnContainer}>
+                        <TouchableOpacity
+                            onPressIn={handleSpeechPressIn}
+                            onPressOut={handleSpeechPressOut}
+                            disabled={streaming}
+                        >
+                            <Feather
+                                name="mic"
+                                size={36}
+                                color={pendingResponse ? 'red' : 'white'}
+                            />
+                        </TouchableOpacity>
+                        <Text style={styles.speechHint}>
+                            {recognizing ? 'Release to stop' : 'Hold to record'}
+                        </Text>
+                    </View>
                 )}
 
-                {ocrEnabled && ocrText != null && (
-                    <View style={styles.ocrOverlay}>
-                        <Text style={styles.overlayLabel}>OCR:</Text>
-                        <Text style={styles.overlayText}>{ocrText}</Text>
+                {(speechText !== '' || chatFragments.length > 0) && (
+                    <View style={[styles.textOverlay, { bottom: 140 }]}>
+                        {speechText !== '' && (
+                            <>
+                                <Text style={styles.overlayLabel}>You:</Text>
+                                <Text style={styles.overlayText}>{speechText}</Text>
+                            </>
+                        )}
+                        {chatFragments.length > 0 && (
+                            <>
+                                <Text style={styles.overlayLabel}>Assistant:</Text>
+                                <Text style={styles.overlayText}>{chatFragments.join(' ')}</Text>
+                            </>
+                        )}
                     </View>
                 )}
             </View>
         );
     }
 
-    // LIVE CAMERA MODE
+    // —— SETTINGS MODE ——
     if (showSettings) {
         return (
             <CameraSettings
@@ -354,23 +403,28 @@ export default function CameraScreen({ onBackToMenu, userEmail }: Props) {
         );
     }
 
+    // —— LIVE CAMERA MODE ——
     if (!hasPermission || !device) {
-        return <View style={styles.center}><Text>No camera permission</Text></View>;
+        return (
+            <View style={styles.center}>
+                <Text>No camera permission</Text>
+            </View>
+        );
     }
 
     return (
         <View style={styles.container}>
             <Camera
+                photoQualityBalance="quality"
                 ref={camRef}
                 style={StyleSheet.absoluteFill}
                 device={device}
                 isActive
                 photo
+                torch={torchEnabled ? 'on' : 'off'} // apply torch state
             />
-
-            <View style={styles.topBlackBar} />
-            <View style={styles.bottomBlackBar} />
-
+            <View style={styles.topBlackBar}/>
+            <View style={styles.bottomBlackBar}/>
             <CameraUI
                 onShutter={shoot}
                 onToggleFlash={toggleFlash}
@@ -378,9 +432,8 @@ export default function CameraScreen({ onBackToMenu, userEmail }: Props) {
                 iconSize={32}
                 iconOffset={80}
             />
-
-            {(busy || tf.state === 'loading' || !labels.length) && (
-                <ActivityIndicator style={styles.center} size="large" color="white" />
+            {(busy || tf.state==='loading' || !labels.length) && (
+                <ActivityIndicator style={styles.center} size="large" color="white"/>
             )}
         </View>
     );
@@ -388,16 +441,11 @@ export default function CameraScreen({ onBackToMenu, userEmail }: Props) {
 
 const styles = StyleSheet.create({
     ocrOverlay: {
-        position: 'absolute',
-        left: 20,
-        right: 20,
-        top: '15%',
-        backgroundColor: 'rgba(0,0,0,0.6)',
-        padding: 8,
-        borderRadius: 6,
+        position:'absolute', left:20, right:20, top:'15%',
+        backgroundColor:'rgba(0,0,0,0.6)', padding:8, borderRadius:6,
     },
-    container:            { flex: 1, backgroundColor: 'black' },
-    center:               { flex: 1, alignItems: 'center', justifyContent: 'center' },
+    container:            { flex:1, backgroundColor:'black' },
+    center:               { flex:1, alignItems:'center', justifyContent:'center' },
     topBlackBar:          { position:'absolute', top:0, width:'100%', height:115, backgroundColor:'black', zIndex:1 },
     bottomBlackBar:       { position:'absolute', bottom:0, width:'100%', height:160, backgroundColor:'black', zIndex:1 },
     previewContainer:     { flex:1, backgroundColor:'black' },
@@ -410,11 +458,9 @@ const styles = StyleSheet.create({
     textOverlay:          { position:'absolute', left:20, right:20, backgroundColor:'rgba(0,0,0,0.6)', padding:8, borderRadius:6 },
     overlayLabel:         { color:'white', fontWeight:'bold' },
     overlayText:          { color:'white', marginTop:4 },
-
-    // ← styles for filter bar
-    filterBar:            { position: 'absolute', bottom: 0, width: '100%', paddingVertical: 8, backgroundColor: 'rgba(0,0,0,0.6)', zIndex:2 },
-    filterButton:         { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 4, borderWidth: 1, borderColor: 'white', marginHorizontal: 6 },
-    filterButtonActive:   { backgroundColor: 'white' },
-    filterText:           { color: 'white', fontSize: 12 },
-    filterTextActive:     { color: 'black' },
+    filterBar:            { position:'absolute', bottom:0, width:'100%', paddingVertical:8, backgroundColor:'rgba(0,0,0,0.6)', zIndex:2 },
+    filterButton:         { paddingHorizontal:10, paddingVertical:4, borderRadius:4, borderWidth:1, borderColor:'white', marginHorizontal:6 },
+    filterButtonActive:   { backgroundColor:'white' },
+    filterText:           { color:'white', fontSize:12 },
+    filterTextActive:     { color:'black' },
 });

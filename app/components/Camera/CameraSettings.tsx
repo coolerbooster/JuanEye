@@ -24,6 +24,7 @@ interface CameraSettingsProps {
 
     onPairToGuardian: () => void;
     onSubscribePremium: () => void;
+    onLogout: () => void;       // ← new prop for logout
     onClose: () => void;
 }
 
@@ -43,6 +44,7 @@ export default function CameraSettings({
 
                                            onPairToGuardian,
                                            onSubscribePremium,
+                                           onLogout,                  // ← destructure it here
                                            onClose,
                                        }: CameraSettingsProps) {
     return (
@@ -122,6 +124,10 @@ export default function CameraSettings({
                 <TouchableOpacity style={styles.secondaryButton} onPress={onSubscribePremium}>
                     <Text style={styles.secondaryButtonText}>Subscribe To PREMIUM</Text>
                 </TouchableOpacity>
+
+                <TouchableOpacity style={styles.secondaryButton} onPress={onLogout}>
+                    <Text style={styles.secondaryButtonText}>Logout</Text>
+                </TouchableOpacity>
             </ScrollView>
         </View>
     );
@@ -141,7 +147,7 @@ const styles = StyleSheet.create({
     featureText: { color: '#fff', fontSize: 14 },
     primaryButton: { backgroundColor: '#fff', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginBottom: 15 },
     primaryButtonText: { color: '#007AFF', fontSize: 16, fontWeight: '600' },
-    secondaryButton: { borderWidth: 1, borderColor: '#fff', paddingVertical: 12, borderRadius: 8, alignItems: 'center' },
+    secondaryButton: { borderWidth: 1, borderColor: '#fff', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginBottom: 15 },
     secondaryButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
     backButton: { position: 'absolute', top: 53, right: 35, zIndex: 2 },
 });
