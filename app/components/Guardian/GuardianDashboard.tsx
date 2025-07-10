@@ -1,4 +1,5 @@
 // src/components/GuardianDashboard.tsx
+
 import React, { useState, useEffect } from 'react';
 import {
     View,
@@ -19,6 +20,13 @@ type Props = {
     userEmail: string;
     onSettings: () => void;
     onEdit: (scan: Scan) => void;
+};
+
+// Helper: truncate a string to `limit` words, adding "..." if longer
+const truncateWords = (text: string, limit: number): string => {
+    const words = text.split(' ');
+    if (words.length <= limit) return text;
+    return words.slice(0, limit).join(' ') + '...';
 };
 
 const GuardianDashboard: React.FC<Props> = ({
@@ -49,33 +57,37 @@ const GuardianDashboard: React.FC<Props> = ({
     }, [userId]);
 
     const renderItem = ({ item }: { item: Scan }) => {
-        if (item.type === 'LLM') {
-            return (
-                <TouchableOpacity
-                    style={styles.itemRow}
-                    onPress={() => onEdit(item)}
-                >
+        // Determine capsule label
+        const tagLabel =
+            item.type === 'LLM'
+                ? 'LLM'
+                : item.type === 'Text'
+                    ? 'OCR'
+                    : 'OBJECT';
+
+        // Determine tag style (red for LLM, default for others)
+        const tagStyle =
+            item.type === 'LLM'
+                ? [styles.tag, styles.llmTag]
+                : styles.tag;
+
+        return (
+            <TouchableOpacity
+                style={styles.itemRow}
+                onPress={() => onEdit(item)}  // always call onEdit
+            >
+                <Text style={tagStyle}>{tagLabel}</Text>
+                {item.type === 'LLM' ? (
                     <Text style={styles.itemText}>
-                        {`${item.id} | ${item.first_user_message}`}
+                        {`${item.id} | ${truncateWords(item.first_user_message, 5)}`}
                     </Text>
-                </TouchableOpacity>
-            );
-        } else {
-            // @ts-ignore
-            return (
-                <TouchableOpacity
-                    style={styles.itemRow}
-                    onPress={() => onEdit(item)}
-                >
+                ) : (
                     <Text style={styles.itemText}>
-                        {`${item.scanId} | ${item.name}`}
+                        {`${item.scanId} | ${truncateWords(item.name, 5)}`}
                     </Text>
-                    {item.type === 'Unknown' && (
-                        <Text style={styles.questionMark}>?</Text>
-                    )}
-                </TouchableOpacity>
-            );
-        }
+                )}
+            </TouchableOpacity>
+        );
     };
 
     return (
@@ -105,10 +117,11 @@ const GuardianDashboard: React.FC<Props> = ({
             {!loading && !error && (
                 <FlatList
                     data={scans}
-                    keyExtractor={item =>
+                    keyExtractor={(item) =>
+                        // prefix with type so keys are globally unique
                         item.type === 'LLM'
-                            ? item.id.toString()
-                            : item.scanId.toString()
+                            ? `LLM-${item.id}`
+                            : `SCAN-${item.scanId}`
                     }
                     contentContainerStyle={{ paddingHorizontal: 20 }}
                     renderItem={renderItem}
@@ -155,15 +168,21 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1,
         paddingVertical: 14,
         flexDirection: 'row',
-        justifyContent: 'space-between',
         alignItems: 'center',
     },
     itemText: { fontSize: 16, color: '#000' },
-    questionMark: {
-        fontSize: 18,
+    tag: {
+        backgroundColor: '#1786d9',
+        color: 'white',
+        borderRadius: 12,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        fontSize: 12,
         fontWeight: 'bold',
-        color: '#000',
-        paddingRight: 4,
+        marginRight: 8,
+    },
+    llmTag: {
+        backgroundColor: 'red',
     },
     bottomBar: {
         backgroundColor: '#1786d9',

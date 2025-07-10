@@ -1,4 +1,4 @@
-// CameraScreen.tsx
+// src/components/CameraScreen.tsx
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
     View,
@@ -7,10 +7,10 @@ import {
     ActivityIndicator,
     Image,
     TouchableOpacity,
-    LayoutChangeEvent,
-    Alert,
     ScrollView,
     Pressable,
+    Alert,
+    Platform,
 } from 'react-native';
 import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
 import MlkitOcr from 'react-native-mlkit-ocr';
@@ -28,7 +28,7 @@ import {
     ExpoSpeechRecognitionModule,
     useSpeechRecognitionEvent,
 } from '@jamsch/expo-speech-recognition';
-import * as Speech from 'expo-speech'; // expo-speech import
+import * as Speech from 'expo-speech';
 
 import {
     chatWithHistory,
@@ -60,12 +60,37 @@ export default function CameraScreen({ onBackToMenu, userEmail }: Props) {
     const tf = useTensorflowModel(require('../../../assets/model.tflite'));
     const net = tf.state === 'loaded' ? tf.model : undefined;
 
+    // TTS voice for Filipino accent
+    const [voice, setVoice] = useState<string | null>(null);
+    useEffect(() => {
+        Speech.getAvailableVoicesAsync()
+            .then(voices => {
+                const ph = voices.find(v =>
+                    v.language?.startsWith('fil') ||
+                    v.language?.startsWith('tl') ||
+                    v.language?.includes('-PH')
+                );
+                if (ph) {
+                    console.log('[TTS] Using Tagalog voice:', ph.identifier);
+                    setVoice(ph.identifier);
+                } else {
+                    console.warn('[TTS] No Tagalog voice found. Falling back to default.');
+                    setVoice(null); // fallback to system default
+                }
+            })
+            .catch(err => {
+                console.warn('[TTS] Error fetching voices, falling back to default:', err);
+                setVoice(null); // fallback to system default
+            });
+    }, []);
+    const ttsOptions = voice ? { voice } : {};
+
     // toggles
     const [ocrEnabled, setOcrEnabled] = useState(false);
     const [mlEnabled, setMlEnabled] = useState(false);
     const [filterEnabled, setFilterEnabled] = useState(false);
     const [llmEnabled, setLlmEnabled] = useState(true);
-    const [torchEnabled, setTorchEnabled] = useState(false); // added torch state
+    const [torchEnabled, setTorchEnabled] = useState(false);
 
     // filter cycle
     const filterOrder = ['none','grayscale','sepia','invert','contrast','brightness'] as const;
@@ -86,9 +111,9 @@ export default function CameraScreen({ onBackToMenu, userEmail }: Props) {
     const [layout, setLayout] = useState({ width: 0, height: 0 });
 
     // speech-to-text
-    const [recognizing, setRecognizing] = useState(false);
-    const [speechText, setSpeechText] = useState<string>('');
-    const speechRef = useRef<string>('');
+    const [speechText, setSpeechText] = useState('');
+    const [isRecording, setIsRecording] = useState(false);
+    const speechRef = useRef<string>('');  // <- store interim & final
 
     // chat state
     const [conversationId, setConversationId] = useState<string|undefined>(undefined);
@@ -99,59 +124,57 @@ export default function CameraScreen({ onBackToMenu, userEmail }: Props) {
     // helper for delays
     const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-    // speech event handlers
-    useSpeechRecognitionEvent('start', () => setRecognizing(true));
-    useSpeechRecognitionEvent('end', () => setRecognizing(false));
-    useSpeechRecognitionEvent('error', e => {
-        console.warn('Speech error:', e.error, e.message);
-        setRecognizing(false);
-    });
-    useSpeechRecognitionEvent('result', e => {
-        const transcript = e.results.map(r => r.transcript).join(' ');
+    // request camera + speech permissions once
+    useEffect(() => {
+        requestPermission();
+        ExpoSpeechRecognitionModule.requestPermissionsAsync()
+            .then(r => console.log('[Mic] speech perm:', r))
+            .catch(e => console.warn('[Mic] perm error', e));
+    }, [requestPermission]);
+
+    // —— SPEECH RECOGNITION EVENTS ——
+    useSpeechRecognitionEvent('result', (event) => {
+        const transcript = event.results[0]?.transcript || '';
+        console.log('[STT] result:', transcript);
         speechRef.current = transcript;
         setSpeechText(transcript);
     });
+    useSpeechRecognitionEvent('end', () => {
+        console.log('[STT] end');
+        setIsRecording(false);
 
-    const handleSpeechPressIn = () => {
-        Speech.stop();               // stop any ongoing TTS when mic is pressed again
-        setStreaming(false);         // reset streaming flag
-        setPendingResponse(false);   // reset pending flag
-        setChatFragments([]);        // clear any previous fragments
-        setSpeechText('');
-        speechRef.current = '';
-        ExpoSpeechRecognitionModule.start({
-            lang: 'en-US',
-            interimResults: true,
-            continuous: false,
-            requiresOnDeviceRecognition: false,
-            addsPunctuation: false,
-        });
-    };
-
-    // ← Updated: append OCR text when enabled
-    const handleSpeechPressOut = async () => {
-        Speech.stop();               // ensure TTS is halted before sending
-        await ExpoSpeechRecognitionModule.stop();
-        await delay(500);
         const final = speechRef.current.trim();
-        // build the full text, including OCR if enabled
+        if (!final) return;
+
         let textToSend = final;
         if (ocrEnabled && ocrText) {
             textToSend += ` OCR:"${ocrText}"`;
         }
         if (textToSend && llmEnabled) {
-            setSpeechText(final);
-            await delay(2500);
+            console.log('[STT] sending to LLM:', textToSend);
             sendToChat(textToSend, false);
+            speechRef.current = '';
+            setSpeechText('');
+        }
+    });
+
+    // Mic press toggles recording exactly like GuardianChatScreen
+    const handleMicPress = async () => {
+        console.log('[Mic] handleMicPress, isRecording =', isRecording);
+        if (isRecording) {
+            console.log('[Mic] stop');
+            ExpoSpeechRecognitionModule.stop();
+            setIsRecording(false);
+        } else {
+            console.log('[Mic] start');
+            setIsRecording(true);
+            ExpoSpeechRecognitionModule.start({
+                lang: 'en-US',
+                interimResults: false,
+                continuous: false,
+            });
         }
     };
-
-    // permissions
-    useEffect(() => {
-        requestPermission();
-        ExpoSpeechRecognitionModule.requestPermissionsAsync()
-            .then(r => { if (!r.granted) console.warn('Speech permissions not granted', r); });
-    }, [requestPermission]);
 
     // load labels
     useEffect(() => {
@@ -165,7 +188,6 @@ export default function CameraScreen({ onBackToMenu, userEmail }: Props) {
     }, []);
 
     async function sendToChat(text: string, useStream = false) {
-        console.log('sendToChat()', { text, useStream, conversationId });
         setChatFragments([]);
         setPendingResponse(true);
         if (useStream) setStreaming(true);
@@ -182,12 +204,12 @@ export default function CameraScreen({ onBackToMenu, userEmail }: Props) {
                 useStream,
                 (frag: StreamFragment) => {
                     if (frag.conversationId) setConversationId(frag.conversationId);
-                    if (typeof frag.answer === 'string') {
+                    if (frag.answer) {
                         const clean = sanitizeText(frag.answer);
                         setChatFragments(prev => {
                             const last = prev[prev.length - 1];
                             if (clean !== last) {
-                                Speech.speak(clean);
+                                Speech.speak(clean, ttsOptions);
                                 return [...prev, clean];
                             }
                             return prev;
@@ -202,14 +224,14 @@ export default function CameraScreen({ onBackToMenu, userEmail }: Props) {
 
             if (!useStream && result?.data?.answer) {
                 const { answer, conversationId: newConvId } = result.data;
-                const cleanAnswer = sanitizeText(answer);
                 if (newConvId) setConversationId(newConvId);
-                setChatFragments([cleanAnswer]);
-                Speech.speak(cleanAnswer);
+                const clean = sanitizeText(answer);
+                setChatFragments([clean]);
+                Speech.speak(clean, ttsOptions);
                 setPendingResponse(false);
             }
         } catch (err: any) {
-            console.error('🚨 chatWithHistory error', err);
+            console.error('[sendToChat]', err);
             Alert.alert('Chat Error', err.message);
             setStreaming(false);
             setPendingResponse(false);
@@ -235,10 +257,6 @@ export default function CameraScreen({ onBackToMenu, userEmail }: Props) {
                 setOcrText(null);
             }
 
-            if (recognizing) {
-                await ExpoSpeechRecognitionModule.stop();
-            }
-
             if (mlEnabled && net) {
                 const { uri: rsz } = await ImageManipulator.manipulateAsync(
                     uri,
@@ -262,13 +280,13 @@ export default function CameraScreen({ onBackToMenu, userEmail }: Props) {
 
             setCapturedUri(uri);
         } catch (e) {
-            console.warn(e);
+            console.warn('[shoot]', e);
         } finally {
             setBusy(false);
         }
-    }, [ocrEnabled, mlEnabled, recognizing, net, labels]);
+    }, [ocrEnabled, mlEnabled, net, labels]);
 
-    const toggleFlash = useCallback(() => setTorchEnabled(prev => !prev), []); // toggles torch
+    const toggleFlash = useCallback(() => setTorchEnabled(p => !p), []);
     const [showSettings, setSettings] = useState(false);
 
     // —— PREVIEW MODE ——
@@ -290,14 +308,16 @@ export default function CameraScreen({ onBackToMenu, userEmail }: Props) {
                 <Pressable
                     style={styles.previewImageWrapper}
                     onPress={cycleFilter}
-                    onLayout={(e) => setLayout({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}
+                    onLayout={e => setLayout({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}
                 >
                     <FilteredImage/>
                     {mlEnabled && layout.width > 0 && boxes.map((b,i) => (
                         <View
                             key={i}
                             style={{
-                                position:'absolute', borderWidth:2, borderColor:'yellow',
+                                position:'absolute',
+                                borderWidth:2,
+                                borderColor:'yellow',
                                 left:   b.x1 * layout.width,
                                 top:    b.y1 * layout.height,
                                 width:  (b.x2 - b.x1) * layout.width,
@@ -314,10 +334,10 @@ export default function CameraScreen({ onBackToMenu, userEmail }: Props) {
                         {filterOrder.map(type => (
                             <TouchableOpacity
                                 key={type}
-                                style={[ styles.filterButton, filterType===type && styles.filterButtonActive ]}
+                                style={[styles.filterButton, filterType===type && styles.filterButtonActive]}
                                 onPress={() => setFilterType(type)}
                             >
-                                <Text style={[ styles.filterText, filterType===type && styles.filterTextActive ]}>
+                                <Text style={[styles.filterText, filterType===type && styles.filterTextActive]}>
                                     {type}
                                 </Text>
                             </TouchableOpacity>
@@ -328,16 +348,15 @@ export default function CameraScreen({ onBackToMenu, userEmail }: Props) {
                 <TouchableOpacity
                     style={styles.backPreviewButton}
                     onPress={() => {
-                        Speech.stop();            // stop any ongoing TTS
+                        Speech.stop();
                         setCapturedUri(null);
                         setOcrText(null);
-                        setSpeechText('');
                         setBoxes([]);
                         setConversationId(undefined);
                         setChatFragments([]);
                         setFilterType('none');
                         setPendingResponse(false);
-                        setStreaming(false);      // ensure streaming flag is cleared
+                        setStreaming(false);
                     }}
                 >
                     <Feather name="arrow-left" size={28} color="white"/>
@@ -346,19 +365,12 @@ export default function CameraScreen({ onBackToMenu, userEmail }: Props) {
                 {llmEnabled && (
                     <View style={styles.recordBtnContainer}>
                         <TouchableOpacity
-                            onPressIn={handleSpeechPressIn}
-                            onPressOut={handleSpeechPressOut}
+                            onPress={handleMicPress}
                             disabled={streaming}
+                            style={styles.micBtn}
                         >
-                            <Feather
-                                name="mic"
-                                size={36}
-                                color={pendingResponse ? 'red' : 'white'}
-                            />
+                            <Text style={styles.micText}>{isRecording ? '■' : '🎤'}</Text>
                         </TouchableOpacity>
-                        <Text style={styles.speechHint}>
-                            {recognizing ? 'Release to stop' : 'Hold to record'}
-                        </Text>
                     </View>
                 )}
 
@@ -421,7 +433,7 @@ export default function CameraScreen({ onBackToMenu, userEmail }: Props) {
                 device={device}
                 isActive
                 photo
-                torch={torchEnabled ? 'on' : 'off'} // apply torch state
+                torch={torchEnabled ? 'on' : 'off'}
             />
             <View style={styles.topBlackBar}/>
             <View style={styles.bottomBlackBar}/>
@@ -453,8 +465,20 @@ const styles = StyleSheet.create({
     previewImage:         { width:'100%', height:'100%', resizeMode:'contain' },
     boxTxt:               { color:'yellow', fontSize:12, backgroundColor:'rgba(0,0,0,0.6)', padding:4 },
     backPreviewButton:    { position:'absolute', top:50, left:20, zIndex:2 },
-    recordBtnContainer:   { position:'absolute', bottom:80, alignSelf:'center', alignItems:'center', zIndex:2 },
-    speechHint:           { color:'white', fontSize:12, marginTop:4 },
+    recordBtnContainer:   {
+        position:'absolute', bottom:80, alignSelf:'center', alignItems:'center', zIndex:2
+    },
+    micBtn: {
+        padding: 10,
+        backgroundColor: '#2196F3',
+        borderRadius: 35,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    micText: {
+        color: 'white',
+        fontSize: 24,
+    },
     textOverlay:          { position:'absolute', left:20, right:20, backgroundColor:'rgba(0,0,0,0.6)', padding:8, borderRadius:6 },
     overlayLabel:         { color:'white', fontWeight:'bold' },
     overlayText:          { color:'white', marginTop:4 },

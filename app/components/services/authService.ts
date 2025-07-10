@@ -2,8 +2,8 @@
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-// const API_BASE = 'http://167.71.198.130:3001'; // ← adjust to your backend host
-const API_BASE = 'http://192.168.50.40:3001'; // ← adjust to your backend host
+// const API_BASE = 'http://167.71.198.130:3001'; // ← Cloud
+const API_BASE = 'http://192.168.50.40:3001'; // ← Mico PC
 
 export interface AuthResponse {
     token?: string;
@@ -666,4 +666,161 @@ export function chatWithHistory(
         xhr.onerror = () => reject(new Error('Network error'));
         xhr.send(JSON.stringify(payload));
     });
+}
+
+export interface GuardianStreamFragment {
+    conversationId?: string;
+    answer?: string;
+    done: boolean;
+}
+
+export interface GuardianChatResponse {
+    ok: boolean;
+    status: number;
+    data: {
+        conversationId: string;
+        answer: string;
+    } | null;
+}
+
+/**
+ * POST /api/user/guardian/llm-ask-question
+ */
+export function guardianChat(
+    targetUserId: number,
+    content: string,
+    base64?: string,
+    conversationId?: string,
+    isStream: boolean = false,
+    onFragment?: (frag: GuardianStreamFragment) => void
+): Promise<GuardianChatResponse> {
+    return new Promise(async (resolve, reject) => {
+        const token = await AsyncStorage.getItem('token');
+        if (!token) return reject(new Error('Authentication expired. Please log in again.'));
+
+        const payload: any = { user_id: targetUserId, content, isStream };
+        if (conversationId) payload.conversationId = conversationId;
+        if (base64)      payload.base64       = base64;
+
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', `${API_BASE}/api/user/guardian/llm-ask-question`, true);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+
+        let buffer = '';
+        let lastIndex = 0;
+
+        xhr.onreadystatechange = () => {
+            if (xhr.readyState === 2 && xhr.status === 404) {
+                reject(new Error(`Chat request failed (${xhr.status})`));
+            }
+        };
+
+        xhr.onprogress = () => {
+            if (!isStream) return;
+            const fullText = xhr.responseText;
+            const newChunk = fullText.substring(lastIndex);
+            lastIndex = fullText.length;
+
+            buffer += newChunk;
+            const parts = buffer.split('\n');
+            buffer = parts.pop()!;
+
+            for (const line of parts) {
+                if (!line.trim()) continue;
+                try {
+                    const frag: GuardianStreamFragment = JSON.parse(line);
+                    onFragment?.(frag);
+                    if (frag.done) xhr.abort();
+                } catch {}
+            }
+        };
+
+        xhr.onload = () => {
+            if (isStream) {
+                return resolve({ ok: true, status: xhr.status, data: null! });
+            }
+            try {
+                const json = JSON.parse(xhr.responseText);
+                resolve(json as GuardianChatResponse);
+            } catch {
+                reject(new Error('Invalid JSON response'));
+            }
+        };
+
+        xhr.onerror = () => reject(new Error('Network error'));
+        xhr.send(JSON.stringify(payload));
+    });
+}
+
+/**
+ * GET /api/user/guardian/:conversationId/image
+ * Returns { conversationId, image } where image is the latest base64/URL string
+ */
+export async function getConversationImage(
+    conversationId: string
+): Promise<{ conversationId: string; image: string }> {
+    const token = await AsyncStorage.getItem('token');
+    if (!token) {
+        throw new Error('Authentication expired. Please log in again.');
+    }
+
+    const res = await fetch(
+        `${API_BASE}/api/user/guardian/${conversationId}/image`,
+        {
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+            },
+        }
+    );
+
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || err.message || `Failed to fetch image (${res.status})`);
+    }
+
+    const data = await res.json();
+    // { conversationId: string; image: string }
+    return data as { conversationId: string; image: string };
+}
+
+export interface ConversationMessage {
+    role: 'user' | 'assistant';
+    content: string;
+    images: string | null;
+    createdAt: string;
+}
+
+export interface ConversationHistoryResponse {
+    conversationId: string;
+    messages: ConversationMessage[];
+}
+
+export async function getConversationHistory(
+    conversationId: string
+): Promise<ConversationHistoryResponse> {
+    const token = await AsyncStorage.getItem('token');
+    if (!token) throw new Error('Authentication expired. Please log in again.');
+
+    const res = await fetch(
+        `${API_BASE}/api/user/guardian/conversation/${conversationId}/history`,
+        {
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+            },
+        }
+    );
+
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(
+            err.error ||
+            err.message ||
+            `Failed to fetch conversation history (${res.status})`
+        );
+    }
+
+    return (await res.json()) as ConversationHistoryResponse;
 }
